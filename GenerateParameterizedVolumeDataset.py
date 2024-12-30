@@ -81,6 +81,9 @@ def main():
     volumes = [os.path.join(GENERATED_VOLUMES_PATH, f) for f in os.listdir(GENERATED_VOLUMES_PATH)]
     volumes.sort()
 
+    if not os.path.exists(TEMP_DIR):
+        os.makedirs(TEMP_DIR)
+
     # Store list of volume files in txt file so that parameterizationWorkerscript.sh can access them later
     with open(os.path.join(TEMP_DIR, 'volumes.txt'), 'w') as volumesFile:
         volumesFile.writelines(f'{volume}\n' for volume in volumes)
