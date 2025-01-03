@@ -1,0 +1,5 @@
+# import GenerateParameterizedVolumeDataset.py so we can call its processResultsAsTheyComeIn() function
+
+import GenerateParameterizedVolumeDataset
+
+GenerateParameterizedVolumeDataset.processResultsAsTheyComeIn()

@@ -35,7 +35,7 @@ def updateCSVWithIntermediateOutput():
             intermediate_data = pickle.load(f)
 
         # Append the data to the parameterization CSV file
-        df = df.append(intermediate_data, ignore_index=True)
+        df = pd.concat([df, intermediate_data], ignore_index=True)
 
         # Remove the pickled file
         os.remove(file)
@@ -60,6 +60,8 @@ def processResultsAsTheyComeIn():
             print('numJobs could not be parsed when running the CMD command!')
             time.sleep(300) # Try again in 300 seconds (5 minutes)
             continue
+        
+        print('Number of jobs running:', numJobs)
 
         if numJobs == 0:
             break
@@ -73,8 +75,7 @@ def processResultsAsTheyComeIn():
 def main():
     if not os.path.exists(PARAMETERIZATION_CSV_PATH):
         # Create empty df with required columns and save as CSV.
-        # Columns: Filename General, Total Magnetic Energy
-        df = pd.DataFrame(columns=['Filename General', 'Total Magnetic Energy'])
+        df = pd.DataFrame(columns=['Filename General', 'Total Magnetic Energy', 'Total Unsigned Current Helicity', 'Total Absolute Net Current Helicity', 'Mean Shear Angle', 'Total Unsigned Volume Vertical Current', 'Twist Parameter Alpha', 'Mean Gradient of Vertical Magnetic Field', 'Mean Gradient of Total Magnetic Field', 'Total Magnitude of Lorentz Force', 'Total Unsigned Magnetic Flux'])
         df.to_csv(PARAMETERIZATION_CSV_PATH, index=False)
     
     # Generated volume example file: Bout_hmi.sharp_cea_720s.10000.20230828_090000_TAI.bin
@@ -95,6 +96,8 @@ def main():
     os.system(f'sbatch --partition=full --mem-per-cpu=10G --array=0-{maxIndex}%250 "{workerscriptLocation}"') # should be roughly 250 jobs at a time
 
     logger.log('Volume parameterization job scheduling complete.', 'LOW')
+
+    time.sleep(600) # Just wait 10 minutes in case scheduling takes a while
 
     processResultsAsTheyComeIn()
 
