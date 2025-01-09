@@ -1,4 +1,3 @@
-from Logger import Logger
 import os
 import re
 import pathlib
@@ -6,10 +5,15 @@ import pandas as pd
 import subprocess
 import time
 import pickle
+import sys
 
-rootDir = pathlib.Path(__file__).resolve().parent.absolute()
+rootDir = pathlib.Path(__file__).resolve().parent.parent.absolute()
 
-GENERATED_VOLUMES_PATH = '/mnt/horton_share/development/data/drms/MagPy_Shared_Data/DefinitiveFieldVolumes'
+sys.path.insert(1, rootDir)
+from Logger import Logger
+
+GENERATED_VOLUMES_PATH_SINGLE_BLOB = '/mnt/horton_share/development/data/drms/MagPy_Shared_Data/DefinitiveFieldVolumes'
+GENERATED_VOLUMES_PATH_MULTI_BLOB = '/mnt/horton_share/development/data/drms/MagPy_Shared_Data/DefinitiveFieldVolumesMultiblob'
 PARAMETERIZATION_CSV_PATH = os.path.join(rootDir, 'OutputData', 'volume_parameterizations.csv')
 TEMP_DIR = os.path.join(rootDir, 'OutputData', 'Temp')
 
@@ -75,11 +79,14 @@ def processResultsAsTheyComeIn():
 def main():
     if not os.path.exists(PARAMETERIZATION_CSV_PATH):
         # Create empty df with required columns and save as CSV.
-        df = pd.DataFrame(columns=['Filename General', 'Total Magnetic Energy', 'Total Unsigned Current Helicity', 'Total Absolute Net Current Helicity', 'Mean Shear Angle', 'Total Unsigned Volume Vertical Current', 'Twist Parameter Alpha', 'Mean Gradient of Vertical Magnetic Field', 'Mean Gradient of Total Magnetic Field', 'Total Magnitude of Lorentz Force', 'Total Unsigned Magnetic Flux'])
+        df = pd.DataFrame(columns=['Filename General', 'Relevant Active Regions', 'Latitude', 'Carrington Longitude', 'Total Magnetic Energy', 'Total Unsigned Current Helicity', 'Total Absolute Net Current Helicity', 'Mean Shear Angle', 'Total Unsigned Volume Vertical Current', 'Twist Parameter Alpha', 'Mean Gradient of Vertical Magnetic Field', 'Mean Gradient of Total Magnetic Field', 'Total Magnitude of Lorentz Force', 'Total Unsigned Magnetic Flux'])
         df.to_csv(PARAMETERIZATION_CSV_PATH, index=False)
     
     # Generated volume example file: Bout_hmi.sharp_cea_720s.10000.20230828_090000_TAI.bin
-    volumes = [os.path.join(GENERATED_VOLUMES_PATH, f) for f in os.listdir(GENERATED_VOLUMES_PATH)]
+    single_blob_volume_paths = [os.path.join(GENERATED_VOLUMES_PATH_SINGLE_BLOB, f) for f in os.listdir(GENERATED_VOLUMES_PATH_SINGLE_BLOB)]
+    # multi_blob_volume_paths = [os.path.join(GENERATED_VOLUMES_PATH_MULTI_BLOB, f) for f in os.listdir(GENERATED_VOLUMES_PATH_MULTI_BLOB)]
+    #volumes = single_blob_volume_paths + multi_blob_volume_paths
+    volumes = single_blob_volume_paths
     volumes.sort()
 
     if not os.path.exists(TEMP_DIR):
@@ -90,7 +97,7 @@ def main():
         volumesFile.writelines(f'{volume}\n' for volume in volumes)
 
     maxIndex = len(volumes) - 1
-    workerscriptLocation = os.path.join(rootDir, 'parameterizationWorkerscript.sh')
+    workerscriptLocation = os.path.join(rootDir, 'VolumeParameterization', 'parameterizationWorkerscript.sh')
 
     # Schedule job array to process each targetARGen. Allow only 250 jobs to run at a time to avoid overuse of cluster resources.
     os.system(f'sbatch --partition=full --mem-per-cpu=10G --array=0-{maxIndex}%250 "{workerscriptLocation}"') # should be roughly 250 jobs at a time

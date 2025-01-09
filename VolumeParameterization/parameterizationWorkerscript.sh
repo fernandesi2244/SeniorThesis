@@ -8,7 +8,7 @@ echo "This job in the array has:"
 echo "- SLURM_JOB_ID=${SLURM_JOB_ID}"
 echo "- SLURM_ARRAY_TASK_ID=${SLURM_ARRAY_TASK_ID}"
 
-VOLUME_FILES_FILE="OutputData/Temp/volumes.txt"
+VOLUME_FILES_FILE="../OutputData/Temp/volumes.txt"
 
 mapfile -t FILES < $VOLUME_FILES_FILE
 VOLUME_PATH=${FILES[$SLURM_ARRAY_TASK_ID]}
