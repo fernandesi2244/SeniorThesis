@@ -24,7 +24,7 @@ class SRS_AR(object):
     Represents an active region from the list of active regions in a NOAA Solar Region Summary file.
     """
 
-    def __init__(self, SRSLine, year, month, day, hasPlage=False):
+    def __init__(self, year, month, day, hasPlage=False):
         """
         Constructs an SRS Active Region object
         """
@@ -47,14 +47,14 @@ class SRS_AR(object):
         self.month = month
         self.day = day
         
-        self.parseLine(SRSLine)
+        # self.parseLine(SRSLine)
 
     def parseLine(self, SRSLine):
         """
         Parses a line of the SRS file and stores relevant information about the active region.
         """
 
-        line = SRSLine.split()
+        line = SRSLine.strip().split()
 
         self.arNum = int(line[0])
         # Only add 10,000 to AR # in the following 3 cases (in around June of 2002, AR # passed 9999 and cycled back to 0000)
@@ -68,10 +68,14 @@ class SRS_AR(object):
             self.area = int(line[3])
             self.zurichClassification = line[4]
             self.longitudinalExtent = int(line[5])
-            self.numSunspots = int(line[6])
-            # Sometimes, there is no mag type in the SRS file
+            # NOAA is inconsistent with the data they provide at this point.
+            line_6 = line[6]
+            if line_6.isdigit():
+                self.numSunspots = int(line_6)
             if len(line) > 7:
                 self.magType = line[7]
+            elif not line_6.isdigit():
+                self.magType = line_6
     
     def setDistanceFromBlob(self, distance):
         """

@@ -257,13 +257,21 @@ class SRSHandler(object):
             begIndex = indexOfSunspots+2
             if 'None' not in all_lines[begIndex]:
                 while(begIndex < indexOfNoSunspots):
-                    ARs.append(SRS_AR(all_lines[begIndex], year, month, day))
+                    try:
+                        ARs.append(SRS_AR(year, month, day))
+                        ARs[-1].parseLine(all_lines[begIndex])
+                    except Exception as e:
+                        SRSHandler.logger.log(f'Error while parsing AR in SRS file. Error: {repr(e)}. SRS file path: {fileToGet}', 'MEDIUM')
                     begIndex += 1
             
             begIndex = indexOfNoSunspots+2
             if 'None' not in all_lines[begIndex]:
                 while(begIndex < indexOfRegionsToReturn):
-                    ARs.append(SRS_AR(all_lines[begIndex], year, month, day, hasPlage=True))
+                    try:
+                        ARs.append(SRS_AR(year, month, day, hasPlage=True))
+                        ARs[-1].parseLine(all_lines[begIndex])
+                    except Exception as e:
+                        SRSHandler.logger.log(f'Error while parsing plage in SRS file. Error: {repr(e)}. SRS file path: {fileToGet}', 'MEDIUM')
                     begIndex += 1
         
         return ARs

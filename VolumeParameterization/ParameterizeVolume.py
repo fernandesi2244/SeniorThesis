@@ -349,7 +349,11 @@ def get_AR_num(labeled, blob_i, arList, blobNum, targetARGen):
             latSigned = latAbs if latCardinal == 'N' else -latAbs
 
             # Retrieve Carrington Heliographic longitude (from SRS file)
-            lonSigned = srsAR.carrLongitude
+            if srs.carrLongitude is not None:
+                lonSigned = srsAR.carrLongitude
+            else:
+                print('Ignoring AR with no Carrington longitude')
+                continue
         else:
             logger.log(f"Couldn't identify latitude part of the following location: {srsAR.location}", 'MEDIUM')
             print("Couldn't identify latitude part of location.")
