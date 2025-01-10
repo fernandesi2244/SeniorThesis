@@ -15,7 +15,7 @@ from skimage.transform import resize
 import datetime
 
 rootDir = pathlib.Path(__file__).resolve().parent.parent.absolute()
-sys.path.insert(1, rootDir)
+sys.path.insert(1, os.path.join(rootDir))
 
 import Utils
 from Logger import Logger

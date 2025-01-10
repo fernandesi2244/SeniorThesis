@@ -9,7 +9,7 @@ import sys
 
 rootDir = pathlib.Path(__file__).resolve().parent.parent.absolute()
 
-sys.path.insert(1, rootDir)
+sys.path.insert(1, os.path.join(rootDir))
 from Logger import Logger
 
 GENERATED_VOLUMES_PATH_SINGLE_BLOB = '/mnt/horton_share/development/data/drms/MagPy_Shared_Data/DefinitiveFieldVolumes'
@@ -114,5 +114,7 @@ if __name__ == '__main__':
     logger = Logger('VolumeParameterizationLog.txt')
     logger.clearLog()
     logger.log('Starting volume parameterization job scheduling...', 'LOW')
+
+    exit()
 
     main()

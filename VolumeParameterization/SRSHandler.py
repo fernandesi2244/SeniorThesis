@@ -25,7 +25,7 @@ from datetime import datetime, timedelta
 import wget
 
 rootDir = pathlib.Path(__file__).resolve().parent.parent.absolute()
-sys.path.insert(1, rootDir)
+sys.path.insert(1, os.path.join(rootDir))
 
 from Logger import Logger
 from SRS_AR import SRS_AR
