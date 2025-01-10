@@ -582,8 +582,13 @@ def main():
     associated_bitmap_path = os.path.join(DEFINITIVE_SHARP_DATA_DIR, target_ar_gen + '.bitmap.fits')
     bitmap = sunpy.map.Map(associated_bitmap_path)
 
-    # Each segmented volume represents a separate blob in the SHARP
-    segmented_volumes = get_segmented_volumes(bx_3D, by_3D, bz_3D)
+    try:
+        # Each segmented volume represents a separate blob in the SHARP
+        segmented_volumes = get_segmented_volumes(bx_3D, by_3D, bz_3D)
+    except Exception as e:
+        print(f'ERROR: Failed to segment volumes for targetARGen {target_ar_gen}: {repr(e)}')
+        logger.log(f'Failed to segment volumes for targetARGen {target_ar_gen}: {repr(e)}', 'HIGH')
+        exit(1)
 
     for (bx_3D_blob, by_3D_blob, bz_3D_blob, ar_nums, blob_lat, blob_lon, blob_index) in segmented_volumes:
         try:
