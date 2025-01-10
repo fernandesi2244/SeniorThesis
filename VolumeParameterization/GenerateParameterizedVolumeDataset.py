@@ -115,6 +115,4 @@ if __name__ == '__main__':
     logger.clearLog()
     logger.log('Starting volume parameterization job scheduling...', 'LOW')
 
-    exit()
-
     main()
