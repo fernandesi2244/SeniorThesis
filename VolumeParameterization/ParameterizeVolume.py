@@ -13,6 +13,8 @@ import pathlib
 from scipy.ndimage import label, generate_binary_structure
 from skimage.transform import resize
 import datetime
+import re
+from scipy import ndimage
 
 rootDir = pathlib.Path(__file__).resolve().parent.parent.absolute()
 sys.path.insert(1, os.path.join(rootDir))
@@ -296,7 +298,6 @@ def get_AR_num(labeled, blob_i, arList, blobNum, targetARGen):
     currentBlob = np.flip(currentBlob, axis=0)
 
     # Get pixel/location information about the HARP
-    # Keep in mind that the Br map has the same scale and size as the bitmap.
     lonReferencePoint = bitmap.meta['CRVAL1']      # This is at the center of the HARP (in deg); in Heliographic Carrington
     latReferencePoint = bitmap.meta['CRVAL2']      # This is at the center of the HARP (in deg); in Heliographic Carrington
     lonDegIncrement = bitmap.meta['CDELT1']        # Degree increment per pixel in longitudinal direction
@@ -310,8 +311,8 @@ def get_AR_num(labeled, blob_i, arList, blobNum, targetARGen):
     while(lonReferencePoint < 0):
         lonReferencePoint += 360
 
-    totalLatPixels = len(brMap.data)
-    totalLonPixels = len(brMap.data[0])
+    totalLatPixels = len(bitmap.data)
+    totalLonPixels = len(bitmap.data[0])
 
     # Calculate the centroid of the blob (in pixel coordinates)
     rowCenter, colCenter = ndimage.measurements.center_of_mass(currentBlob)
@@ -448,7 +449,7 @@ def get_AR_num(labeled, blob_i, arList, blobNum, targetARGen):
         else:
             # As a last resort, refer to the NOAA active regions provided in the FITS header
             print('No ARs matched up with the blob. Attempting lookup in FITS header...')
-            relARs = brMap.meta['NOAA_ARS']
+            relARs = bitmap.meta['NOAA_ARS']
             if relARs != 'MISSING' and relARs != '': # MISSING in Lookdata actually means ''. However, take both into account just in case.
                 try:
                     relARs = relARs.replace('[', '').replace(']', '').split(',') # Remove brackets and split on commas
@@ -467,7 +468,7 @@ def get_AR_num(labeled, blob_i, arList, blobNum, targetARGen):
     if arNum is None:
         logger.log(f'Assigning unique ID to blob {blobNum} within HARP {targetARGen}', 'LOW')
         print('No ARs could be associated with the blob. Assigning unique ID...')
-        arNum = f"{brMap.meta['HARPNUM']}-{blobNum}"
+        arNum = f"{bitmap.meta['HARPNUM']}-{blobNum}"
         # Note that using blobNum usually means that for the same HARP at different times,
         # if all other identification schemes fail, you can depend on the biggest blob being
         # [HARPNUM]-1, with increasing numbers ([HARPNUM]-2) corresponding to smaller blobs.
