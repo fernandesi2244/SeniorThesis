@@ -12,8 +12,6 @@ import math
 import pathlib
 from scipy.ndimage import label, generate_binary_structure
 from skimage.transform import resize
-import datetime
-import re
 from scipy import ndimage
 
 rootDir = pathlib.Path(__file__).resolve().parent.parent.absolute()
@@ -21,7 +19,6 @@ sys.path.insert(1, os.path.join(rootDir))
 
 import Utils
 from Logger import Logger
-from SRSHandler import SRSHandler
 
 REGULAR_SHARED_DATA_DIR = os.path.join(os.sep + 'share', 'development', 'data', 'drms', 'MagPy_Shared_Data')
 DEFINITIVE_SHARP_DATA_DIR = os.path.join(REGULAR_SHARED_DATA_DIR, 'TrainingData' + os.sep)
@@ -268,24 +265,15 @@ def get_total_unsigned_magnetic_flux(bx_3D, by_3D, bz_3D):
     
     return total_flux_of_AR_box
 
-def get_AR_num(labeled, blob_i, arList, blobNum, targetARGen):
+def get_blob_loc(labeled, blob_i):
     """
-    Gets the AR number of the blob indicated by blob_i.
+    Gets the lat/lon of the centroid of the blob indicated by blob_i.
 
-    Returns a tuple where the first element is the list of active regions
-    that are associated with the blob. The first element in this list is
-    the AR that the algorithm thinks is associated with the blob. The
-    elements after that are any other ARs that have coordinates within the
-    blob but are not the most prevalent. The second element of the tuple is
-    whether or not the blob has plage, as indicated by the NOAA SRS file.
-    The third and fourth elements are the Carrington latitude and longtiude
-    coordinates of the blob, respectively.
+    Returns a tuple where the first and second components are the
+    latitude and Carrington longitude of the blob centroid, respectively.
 
     :param labeled: the array of labeled blobs
     :param blob_i: the the label of the current blob being examined
-    :param arList: the list of ARs from the SRS file
-    :param blobNum: the blob iteration we are currently on (not equal to the number of the blob—which is sorted by blob area)
-    :param targetARGen: the 'general' file name of the SHARP
     """
     
     # Creates 2D array that is the same size as the HARP's maps that labels just the current blob being examined.
@@ -311,9 +299,6 @@ def get_AR_num(labeled, blob_i, arList, blobNum, targetARGen):
     while(lonReferencePoint < 0):
         lonReferencePoint += 360
 
-    totalLatPixels = len(bitmap.data)
-    totalLonPixels = len(bitmap.data[0])
-
     # Calculate the centroid of the blob (in pixel coordinates)
     rowCenter, colCenter = ndimage.measurements.center_of_mass(currentBlob)
     rowCenter, colCenter = round(rowCenter), round(colCenter)
@@ -326,160 +311,7 @@ def get_AR_num(labeled, blob_i, arList, blobNum, targetARGen):
     while(blobLon < 0):
         blobLon += 360
 
-    ARsInBlob = list()
-    ARsOutsideBlob = list()
-
-    if len(arList) == 0:
-        logger.log(f'There were no SRS entries in the file for HARP {targetARGen}', 'LOW')
-
-    # For each AR in the SRS file, see if it's in the current blob, and make other relevant calculations
-    for srsAR in arList:
-        # Search for N or S followed by any number of digits (that may include a decimal point)
-        latPattern = re.compile('([NS])([\d.]+)')
-
-        # Locate latitude segment from location string
-        latMatch = re.search(latPattern, srsAR.location)
-        if latMatch:
-            # group(1) extracts the cardinal direction character of the latitude (using 1st set of parentheses in regex pattern)
-            latCardinal = latMatch.group(1)
-
-            # group(2) extracts the numerical part of the latitude (using 2nd set of parentheses in regex pattern)
-            latAbs = float(latMatch.group(2))
-
-            # Use cardinal direction to determine signed latitude
-            latSigned = latAbs if latCardinal == 'N' else -latAbs
-
-            # Retrieve Carrington Heliographic longitude (from SRS file)
-            lonSigned = srsAR.carrLongitude
-        else:
-            logger.log(f"Couldn't identify latitude part of the following location: {srsAR.location}", 'MEDIUM')
-            print("Couldn't identify latitude part of location.")
-            continue
-        
-        # At this point we have the signed lat and lon of the current AR from the SRS file
-        arLat = latSigned
-        arLon = lonSigned
-        
-        # Retrieve the pixel in the HARP array that corresponds with the AR's latitude and longitude coordinates
-        arLatPixel = int(latReferencePixel - (arLat-latReferencePoint)/latDegIncrement) # The higher the latitude, the lower the row index
-        arLonPixel = int(lonReferencePixel + (arLon-lonReferencePoint)/lonDegIncrement) # The higher the longitude, the higher the col index
-
-        # Check if corresponding pixel has a valid row and column index in the currentBlob array
-        if arLatPixel < 0 or arLatPixel >= totalLatPixels or arLonPixel < 0 or arLonPixel >= totalLonPixels:
-            continue
-
-        if currentBlob[arLatPixel][arLonPixel] > 0:
-            # The current AR is in the blob!
-
-            # Calculate distance of AR from blob centroid
-            distance = math.sqrt(math.pow(arLonPixel - colCenter, 2) + math.pow(arLatPixel - rowCenter, 2))
-            srsAR.setDistanceFromBlob(distance)
-
-            ARsInBlob.append(srsAR)
-        else:
-            # The current AR is within the HARP but outside the current blob
-
-            # Quickly calculate closest distance of AR to blob boundary
-            blobIndices = np.argwhere(currentBlob > 0)
-            blobRows = blobIndices[:,0]
-            blobColumns = blobIndices[:,1]
-            distances = np.sqrt((blobRows-arLatPixel)**2 + (blobColumns-arLonPixel)**2)
-            closestDistance = np.amin(distances)
-            srsAR.setDistanceFromBlob(closestDistance)
-
-            ARsOutsideBlob.append(srsAR)
-
-    print('Printing ARs in blob:', ARsInBlob)
-
-    # Initially assume that there is no NOAA AR associated with the blob and that it doesn't have plage
-    arNum = None
-    hasPlage = False
-
-    # Add all of the AR #s within the blob to the list of "taken" ARs; we don't want other small blobs nearby trying to take these 
-    # numbers from the FITS header for themselves.
-    [takenARs.append(AR.arNum) for AR in ARsInBlob]
-
-    if len(ARsInBlob) == 1:
-        # Only one AR; assign it
-        hasPlage = ARsInBlob[0].hasPlage
-        arNum = ARsInBlob[0].arNum
-    elif len(ARsInBlob) > 1:
-        # If there are multiple active regions within the blob, then we will first look through those with sunspots and choose the 
-        # one that has the greatest area. If there are no active regions with sunspots in the blob, only then will we try to associate
-        # an active region with plage with the blob. This is because active region assignments with sunspots are preferred.
-
-        # If multiple active regions with sunspots are within the blob, choose the one with the largest area.
-        ARsWithSunspots = list(filter(lambda x: not x.hasPlage, ARsInBlob))  # Only keep ARs that don't have plage
-        ARsWithSunspots = sorted(ARsWithSunspots, key=lambda x: x.area, reverse=True)   # Sorts ARs in descending order based on area
-
-        if len(ARsWithSunspots) > 0:
-            # Return the AR # with the greatest area
-            hasPlage = False
-            arNum = ARsWithSunspots[0].arNum
-        else:
-            # In this case, there are only active regions with plage in the blob
-            ARsWithPlage = sorted(ARsInBlob, key=lambda x: x.distanceFromBlob)
-            closestAR = ARsWithPlage[0]
-
-            logger.log(f'AR {closestAR.arNum} WITH PLAGE inside the blob {blobNum} was assigned to it. Distance = {closestAR.distanceFromBlob:.2f} pixels. Blob within HARP {targetARGen}', 'LOW')
-            hasPlage = True
-            arNum = closestAR.arNum
-    else:
-        # Try to find the closest AR to the blob boundary if no ARs are detected within the blob
-        ARs = ARsOutsideBlob[:]  # ARs outside blob (if any)
-
-        # Remove ARs that are already taken
-        ARs = list(filter(lambda x: x.arNum not in takenARs, ARs))
-
-        # Sort by distance from blob boundary in ascending order so that the first element is the closest one
-        ARs = sorted(ARs, key=lambda x: x.distanceFromBlob)
-
-        # If the AR is too far from the blob boundary (greater than 50 pixels), we do not want to associate the two.
-        # 33 pixels comes from the 1 degree error in the NOAA SRS locations combined with the fact that there are 0.03 degrees per HARP pixel
-        # The other 17 pixels come from the need to account for the changing shape of blobs throughout the day.
-        # This adds up to an error of 1.5 degrees.
-        if len(ARs) > 0 and ARs[0].distanceFromBlob <= 50:
-            takenARs.append(ARs[0].arNum)
-            hasPlage = ARs[0].hasPlage
-            if hasPlage:
-                logger.log(f'AR {ARs[0].arNum} WITH PLAGE outside the blob {blobNum} was assigned to it. Distance = {ARs[0].distanceFromBlob:.2f} pixels. Blob within HARP {targetARGen}', 'LOW')
-            else:
-                logger.log(f'AR {ARs[0].arNum} WITH SUNSPOT outside the blob {blobNum} was assigned to it. Distance = {ARs[0].distanceFromBlob:.2f} pixels. Blob within HARP {targetARGen}', 'LOW')
-            arNum = ARs[0].arNum
-        else:
-            # As a last resort, refer to the NOAA active regions provided in the FITS header
-            print('No ARs matched up with the blob. Attempting lookup in FITS header...')
-            relARs = bitmap.meta['NOAA_ARS']
-            if relARs != 'MISSING' and relARs != '': # MISSING in Lookdata actually means ''. However, take both into account just in case.
-                try:
-                    relARs = relARs.replace('[', '').replace(']', '').split(',') # Remove brackets and split on commas
-                    relARs = [int(i) for i in relARs] # Cast each element as int
-                    for ar in relARs:
-                        if ar not in takenARs:
-                            logger.log(f'FITS header AR {ar} assigned to blob {blobNum} within HARP {targetARGen}', 'LOW')
-                            takenARs.append(ar)
-                            arNum = ar
-                            break
-                except:
-                    # Something went wrong when parsing the AR list; continue on.
-                    pass
-    
-    # If arNum is still None, assign unique ID
-    if arNum is None:
-        logger.log(f'Assigning unique ID to blob {blobNum} within HARP {targetARGen}', 'LOW')
-        print('No ARs could be associated with the blob. Assigning unique ID...')
-        arNum = f"{bitmap.meta['HARPNUM']}-{blobNum}"
-        # Note that using blobNum usually means that for the same HARP at different times,
-        # if all other identification schemes fail, you can depend on the biggest blob being
-        # [HARPNUM]-1, with increasing numbers ([HARPNUM]-2) corresponding to smaller blobs.
-        # This is because we iterated from the largest to smallest blob in the beginning.
-
-    # First element to return is a list in the format: [most likely AR #, all other AR #s within blob], where
-    # each element is a single AR number.
-    ARsToReturn = [arNum]
-    [ARsToReturn.append(ar.arNum) for ar in ARsInBlob if ar.arNum not in ARsToReturn]   # Ensure no duplicates while preserving order.
-
-    return (ARsToReturn, hasPlage, blobLat, blobLon)
+    return (blobLat, blobLon)
 
 def get_segmented_volumes(bx_3D, by_3D, bz_3D):
     # Resize bitmap data to 200x400
@@ -523,13 +355,6 @@ def get_segmented_volumes(bx_3D, by_3D, bz_3D):
         # "smoothed out" or small artificial artifacts being generated during resizing. Since this would only happen for very small
         # blobs, and because both blob lists are sorted by size in decreasing order, we can continue to pairwise-relate blobs at every
         # position in the lists from the beginning until one of the lists becomes exhausted.
-    
-    # Get the list of ARs from the SRS file to be used by the get_AR_num function
-    dtStr = bitmap.meta['T_REC'][:19] #string of datetime without the _TAI
-    HARPDate = datetime.datetime.strptime(dtStr, '%Y.%m.%d_%H:%M:%S') #convert string to datetime object
-    srsHandler = SRSHandler(HARPDate)
-    srsHandler.downloadSRS()
-    arList = srsHandler.getARList()
 
     # For now, do exact cutouts of the blobs from the x, y, z components of the volume.
     # This means use the mask to cut out each blob at each z level of the original volume.
@@ -538,7 +363,7 @@ def get_segmented_volumes(bx_3D, by_3D, bz_3D):
         if i >= len(blobs):
             break
 
-        arNums, hasPlage, blobLat, blobLon = get_AR_num(labeled, blobs[i], arList, i + 1, target_ar_gen)
+        blobLat, blobLon = get_blob_loc(labeled, blobs[i])
 
         # Create a new volume for the blob. That is, mask out ~blob pixels at every height of the volume, which is in the resized scale.
         mask = labeled_resized == volume_blob_num
@@ -559,7 +384,7 @@ def get_segmented_volumes(bx_3D, by_3D, bz_3D):
         by_3D_blob = np.transpose(by_3D_blob, (1, 2, 0))
         bz_3D_blob = np.transpose(bz_3D_blob, (1, 2, 0))
 
-        segmented_volumes.append((bx_3D_blob, by_3D_blob, bz_3D_blob, arNums, blobLat, blobLon, i + 1))
+        segmented_volumes.append((bx_3D_blob, by_3D_blob, bz_3D_blob, blobLat, blobLon, i + 1))
     
     return segmented_volumes
 
@@ -591,7 +416,7 @@ def main():
         logger.log(f'Failed to segment volumes for targetARGen {target_ar_gen}: {repr(e)}', 'HIGH')
         exit(1)
 
-    for (bx_3D_blob, by_3D_blob, bz_3D_blob, ar_nums, blob_lat, blob_lon, blob_index) in segmented_volumes:
+    for (bx_3D_blob, by_3D_blob, bz_3D_blob, blob_lat, blob_lon, blob_index) in segmented_volumes:
         try:
             tot_mag_energy = get_total_magnetic_energy(bx_3D_blob, by_3D_blob, bz_3D_blob, target_ar_gen)
             tot_unsigned_current_helicity = get_total_unsigned_current_helicity(bx_3D_blob, by_3D_blob, bz_3D_blob)
@@ -609,8 +434,8 @@ def main():
             exit(1)
 
         # Make a new DF with the calculated parameters as one row and save it as a pickle file.
-        df = pd.DataFrame(columns=['Filename General', 'Relevant Active Regions', 'Latitude', 'Carrington Longitude', 'Total Magnetic Energy', 'Total Unsigned Current Helicity', 'Total Absolute Net Current Helicity', 'Mean Shear Angle', 'Total Unsigned Volume Vertical Current', 'Twist Parameter Alpha', 'Mean Gradient of Vertical Magnetic Field', 'Mean Gradient of Total Magnetic Field', 'Total Magnitude of Lorentz Force', 'Total Unsigned Magnetic Flux'])
-        df.loc[0] = [target_ar_gen, str(ar_nums), blob_lat, blob_lon, tot_mag_energy, tot_unsigned_current_helicity, tot_abs_net_current_helicity, mean_shear_angle, tot_unsigned_volume_vertical_current, twist_param_alpha, mean_grad_vert_mag_field, mean_grad_total_mag_field, tot_mag_lorentz_force, tot_unsigned_mag_flux]
+        df = pd.DataFrame(columns=['Filename General', 'Latitude', 'Carrington Longitude', 'Volume Total Magnetic Energy', 'Volume Total Unsigned Current Helicity', 'Volume Total Absolute Net Current Helicity', 'Volume Mean Shear Angle', 'Volume Total Unsigned Volume Vertical Current', 'Volume Twist Parameter Alpha', 'Volume Mean Gradient of Vertical Magnetic Field', 'Volume Mean Gradient of Total Magnetic Field', 'Volume Total Magnitude of Lorentz Force', 'Volume Total Unsigned Magnetic Flux'])
+        df.loc[0] = [target_ar_gen, blob_lat, blob_lon, tot_mag_energy, tot_unsigned_current_helicity, tot_abs_net_current_helicity, mean_shear_angle, tot_unsigned_volume_vertical_current, twist_param_alpha, mean_grad_vert_mag_field, mean_grad_total_mag_field, tot_mag_lorentz_force, tot_unsigned_mag_flux]
         # save as pickle file to OutputData/Temp with same name as target_ar_gen
         df.to_pickle(os.path.join(rootDir, 'OutputData', 'Temp', f'{target_ar_gen}-{blob_index}.pkl'))
 

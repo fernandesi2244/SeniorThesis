@@ -79,14 +79,13 @@ def processResultsAsTheyComeIn():
 def main():
     if not os.path.exists(PARAMETERIZATION_CSV_PATH):
         # Create empty df with required columns and save as CSV.
-        df = pd.DataFrame(columns=['Filename General', 'Relevant Active Regions', 'Latitude', 'Carrington Longitude', 'Total Magnetic Energy', 'Total Unsigned Current Helicity', 'Total Absolute Net Current Helicity', 'Mean Shear Angle', 'Total Unsigned Volume Vertical Current', 'Twist Parameter Alpha', 'Mean Gradient of Vertical Magnetic Field', 'Mean Gradient of Total Magnetic Field', 'Total Magnitude of Lorentz Force', 'Total Unsigned Magnetic Flux'])
+        df = pd.DataFrame(columns=['Filename General', 'Latitude', 'Carrington Longitude', 'Volume Total Magnetic Energy', 'Volume Total Unsigned Current Helicity', 'Volume Total Absolute Net Current Helicity', 'Volume Mean Shear Angle', 'Volume Total Unsigned Volume Vertical Current', 'Volume Twist Parameter Alpha', 'Volume Mean Gradient of Vertical Magnetic Field', 'Volume Mean Gradient of Total Magnetic Field', 'Volume Total Magnitude of Lorentz Force', 'Volume Total Unsigned Magnetic Flux'])
         df.to_csv(PARAMETERIZATION_CSV_PATH, index=False)
     
     # Generated volume example file: Bout_hmi.sharp_cea_720s.10000.20230828_090000_TAI.bin
     single_blob_volume_paths = [os.path.join(GENERATED_VOLUMES_PATH_SINGLE_BLOB, f) for f in os.listdir(GENERATED_VOLUMES_PATH_SINGLE_BLOB)]
-    # multi_blob_volume_paths = [os.path.join(GENERATED_VOLUMES_PATH_MULTI_BLOB, f) for f in os.listdir(GENERATED_VOLUMES_PATH_MULTI_BLOB)]
-    #volumes = single_blob_volume_paths + multi_blob_volume_paths
-    volumes = single_blob_volume_paths
+    multi_blob_volume_paths = [os.path.join(GENERATED_VOLUMES_PATH_MULTI_BLOB, f) for f in os.listdir(GENERATED_VOLUMES_PATH_MULTI_BLOB)]
+    volumes = single_blob_volume_paths + multi_blob_volume_paths
     volumes.sort()
 
     if not os.path.exists(TEMP_DIR):
