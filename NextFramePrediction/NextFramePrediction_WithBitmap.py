@@ -81,15 +81,15 @@ def build_model(sequence_length, width, height, channels):
     model.compile(optimizer='adam', loss='mean_squared_error')
     return model
 
-directory = 'npy_files_compressed/LOSFullDiskMagnetogramNPYFiles'
+directory = '/share/development/data/drms/MagPy_Shared_Data/LOSFullDiskMagnetogramNPYFiles512'
 sequence_length = 10  # Number of frames in each sequence
 batch_size = 5
-target_size = (256, 256)  # Adjust based on your dataset
+target_size = (512, 512)  # Adjust based on your dataset
 
 filepaths = os.listdir(directory)
 filepaths = [os.path.join(directory, filepath) for filepath in filepaths]
 filepaths.sort()
-filepaths = filepaths[::4]
+filepaths = filepaths[::4] # TODO: Play with later
 
 generator = ImageSequenceGenerator(filepaths, sequence_length, batch_size, target_size)
 
