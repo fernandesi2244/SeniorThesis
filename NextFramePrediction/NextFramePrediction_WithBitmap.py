@@ -22,13 +22,13 @@ GLOBAL_MAX = 2500
 # predict the next frame at the next hour.
 
 def correct_nans(image):
-        image[np.isnan(image)] = 0
-        return image
+    image[np.isnan(image)] = 0
+    return image
 
 def normalize(image):
     return (image - GLOBAL_MIN) / (GLOBAL_MAX - GLOBAL_MIN)
 
-def gaussian_filter(image):
+def apply_gaussian_filter(image):
     bitmap = gaussian_filter(abs(image), 48, order=0) > 32
     return image * bitmap
 
@@ -54,7 +54,7 @@ class ImageSequenceGenerator(tf.keras.utils.Sequence):
         for i in range(0, self.batch_size):
             sequence_files = batch_filepaths[i:i+self.sequence_length]
             label_file = batch_filepaths[i+self.sequence_length]
-            sequence_data = [np.expand_dims(normalize(gaussian_filter(correct_nans(np.load(file)))), axis=-1) for file in sequence_files]
+            sequence_data = [np.expand_dims(normalize(apply_gaussian_filter(correct_nans(np.load(file)))), axis=-1) for file in sequence_files]
             label_data = np.expand_dims(normalize(correct_nans(np.load(label_file))), axis=-1)
             batch_data.append(sequence_data)
             batch_labels.append(label_data)
