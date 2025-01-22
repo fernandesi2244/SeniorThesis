@@ -10,8 +10,18 @@ before feeding it into the model.
 import numpy as np
 import os
 from tqdm import tqdm
-from NextFramePrediction.NextFramePrediction_FinalModel import correct_nans, apply_gaussian_filter
 from sklearn.model_selection import train_test_split
+from scipy.ndimage import gaussian_filter
+
+# Pulled from NextFramePrediction/NextFramePrediction_FinalModel.py
+def correct_nans(image):
+    image[np.isnan(image)] = 0
+    return image
+
+def apply_gaussian_filter(image):
+    bitmap = gaussian_filter(abs(image), 48, order=0) > 32
+    return image * bitmap
+
 
 directory = '/share/development/data/drms/MagPy_Shared_Data/LOSFullDiskMagnetogramNPYFiles512'
 filepaths = os.listdir(directory)
