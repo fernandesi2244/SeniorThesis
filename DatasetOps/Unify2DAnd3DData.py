@@ -8,6 +8,8 @@ no ambiguity in which record to associate from the 2D dataset, which contains re
 each blob in a SHARP.
 """
 
+TODO: ADD IN TEBBS DATA
+
 import pandas as pd
 import numpy as np
 
@@ -33,7 +35,7 @@ full_data = data3D.copy()
 
 # Add the appropriate 2D columns from:      Gradient_00	Gradient_05	Gradient_10	Gradient_15	Gradient_20	Gradient_25	Gradient_30	Gradient_35	Gradient_40	Gradient_45	Gradient_50	Shear_00	Shear_05	Shear_10	Shear_15	Shear_20	Shear_25	Shear_30	Shear_35	Shear_40	Shear_45	Shear_50	Phi	Total Unsigned Current Helicity	Total Photospheric Magnetic Free Energy Density	Total Unsigned Vertical Current	Abs of Net Current helicity	M&X Flare Event Rate	Filename General	Relevant Active Regions	Number of Sunspots	Is Plage	Number of Recent Flares	Degree Distance from Center	Latitude	Carrington Longitude	Stonyhurst Longitude	Magnetic Area	Number of Recent CMEs
 # Join on the 'Filename General' column, which both datasets have.
-new_cols = ['Gradient_00', 'Gradient_05', 'Gradient_10', 'Gradient_15', 'Gradient_20', 'Gradient_25', 'Gradient_30', 'Gradient_35', 'Gradient_40', 'Gradient_45', 'Gradient_50', 'Shear_00', 'Shear_05', 'Shear_10', 'Shear_15', 'Shear_20', 'Shear_25', 'Shear_30', 'Shear_35', 'Shear_40', 'Shear_45', 'Shear_50', 'Phi', 'Total Unsigned Current Helicity', 'Total Photospheric Magnetic Free Energy Density', 'Total Unsigned Vertical Current', 'Abs of Net Current helicity', 'M&X Flare Event Rate', 'Relevant Active Regions', 'Number of Sunspots', 'Is Plage', 'Number of Recent Flares', 'Degree Distance from Center', 'Stonyhurst Longitude', 'Magnetic Area']
+new_cols = ['Gradient_00', 'Gradient_10', 'Gradient_30', 'Gradient_50', 'Shear_00', 'Shear_10', 'Shear_30', 'Shear_50', 'Phi', 'Total Unsigned Current Helicity', 'Total Photospheric Magnetic Free Energy Density', 'Total Unsigned Vertical Current', 'Abs of Net Current helicity', 'M&X Flare Event Rate', 'Relevant Active Regions', 'Number of Sunspots', 'Is Plage', 'Number of Recent Flares', 'Degree Distance from Center', 'Stonyhurst Longitude', 'Magnetic Area']
 
 # Add these columns to the full_data df
 for col in new_cols:

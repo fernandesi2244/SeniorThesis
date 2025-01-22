@@ -8,11 +8,17 @@ This will help inform how to normalize the data before feeding it into the model
 
 import numpy as np
 import os
+import sys
 from tqdm import tqdm
 from sklearn.model_selection import train_test_split
-from Utils import load_volume_components
 import sunpy.map
 from skimage.transform import resize
+import pathlib
+
+rootDir = pathlib.Path(__file__).resolve().parent.parent.absolute()
+sys.path.insert(1, os.path.join(rootDir))
+
+from Utils import load_volume_components
 
 GENERATED_VOLUMES_PATH_SINGLE_BLOB = '/mnt/horton_share/development/data/drms/MagPy_Shared_Data/DefinitiveFieldVolumes'
 GENERATED_VOLUMES_PATH_MULTI_BLOB = '/mnt/horton_share/development/data/drms/MagPy_Shared_Data/DefinitiveFieldVolumesMultiblob'
