@@ -12,6 +12,8 @@ from skimage.metrics import peak_signal_noise_ratio as psnr
 
 from skimage.transform import resize
 
+FIX SCRIPT BASED ON RECENT CHANGES
+
 import keras
 import sys
 import time

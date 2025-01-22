@@ -13,7 +13,7 @@ import numpy as np
 
 # Load the 2D and 3D datasets
 data2D = pd.read_csv('../InputData/3_175_150_100_vector_hourly.csv')
-data3D = pd.read_csv('../InputData/volume_parameterizations_single_blob_carved_exactly.csv')
+data3D = pd.read_csv('../InputData/volume_parameterizations_all_blobs_carved_from_bitmap.csv')
 
 # Change the 'Filename General' column in the 2D dataset to match the 3D dataset
 # i.e., row_filename_base = row['Filename General'].split('/')[-1][:-1]

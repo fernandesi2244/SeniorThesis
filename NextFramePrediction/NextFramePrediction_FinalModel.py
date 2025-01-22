@@ -4,9 +4,10 @@ import os
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import ConvLSTM2D, BatchNormalization
+from tensorflow.keras.layers import ConvLSTM2D, BatchNormalization, TimeDistributed, Conv2D, LeakyReLU
 from sklearn.model_selection import train_test_split
 from scipy.ndimage import gaussian_filter
+import multiprocessing
 
 import keras
 
@@ -68,14 +69,25 @@ def build_model(sequence_length, width, height, channels):
     # and generate a single image as output. Remember that the output should not be a
     # sequence of images, but a single image.
     model = Sequential([
+        # First dimension already assumed to be the batch size and handled by keras.
         tf.keras.layers.Input(shape=(sequence_length, width, height, channels)),
+
+        # Initial high-level feature extraction to aid the ConvLSTM layers.
+        TimeDistributed(Conv2D(32, (3, 3), activation='relu', padding='same')),
+        TimeDistributed(Conv2D(64, (3, 3), activation='relu', padding='same')),
+
         ConvLSTM2D(filters=64, kernel_size=(5, 5), padding='same', activation='tanh', return_sequences=True),
         BatchNormalization(),
-        ConvLSTM2D(filters=32, kernel_size=(3, 3), padding='same', activation='tanh', return_sequences=True),
+        ConvLSTM2D(filters=64, kernel_size=(3, 3), padding='same', activation='tanh', return_sequences=True),
         BatchNormalization(),
-        ConvLSTM2D(filters=16, kernel_size=(1, 1), padding='same', activation='tanh', return_sequences=False),
+        ConvLSTM2D(filters=64, kernel_size=(1, 1), padding='same', activation='tanh', return_sequences=False),
         # BatchNormalization(), # TODO: Test with and without this.
-        tf.keras.layers.Conv2D(filters=1, kernel_size=(3, 3), activation='sigmoid', padding='same')
+        
+        # Conv2D(filters=1, kernel_size=(3, 3), activation='tanh', padding='same')
+
+        Conv2D(16, (3, 3), activation=None, padding='same'),
+        LeakyReLU(alpha=0.1),
+        Conv2D(1, (1, 1), activation='tanh', padding='same')  # tanh instead of sigmoid for magnetogram values
     ])
     
     model.compile(optimizer='adam', loss='mean_squared_error')
@@ -113,12 +125,18 @@ model = build_model(sequence_length, target_size[0], target_size[1], 1)
 # Define some callbacks to improve training.
 early_stopping = keras.callbacks.EarlyStopping(monitor="val_loss", patience=10)
 reduce_lr = keras.callbacks.ReduceLROnPlateau(monitor="val_loss", patience=5)
-checkpoint = keras.callbacks.ModelCheckpoint("next_frame_prediction_checkpoint.keras", save_best_only=True)
+checkpoint = keras.callbacks.ModelCheckpoint("next_frame_prediction_final_checkpoint.keras", save_best_only=True)
 
 # Start timer
 start = time.time()
 
-model.fit(train_generator, epochs=10, validation_data=val_generator, callbacks=[early_stopping, reduce_lr, checkpoint])
+cpus_to_use = max(int(multiprocessing.cpu_count() * 0.9), 1)
+print('Using', cpus_to_use, 'CPUs.')
+
+model.fit(train_generator, epochs=10, validation_data=val_generator,
+          callbacks=[early_stopping, reduce_lr, checkpoint],
+          use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2 # TODO: Play around with this
+        )
 
 # Print the time that has elapsed during training
 print('Training time:', time.time() - start)
@@ -128,4 +146,4 @@ test_loss = model.evaluate(test_generator)
 print('Test loss:', test_loss)
 
 # Save the model
-model.save('next_frame_prediction_2_with_bitmap.keras')
+model.save('next_frame_prediction_final.keras')
