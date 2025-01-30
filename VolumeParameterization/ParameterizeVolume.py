@@ -38,13 +38,12 @@ PARAMETERIZATION_CSV_PATH = os.path.join(rootDir, 'OutputData', 'volume_paramete
 - Compute the total unsigned magnetic flux in a Cartesian box.
 """
 
-def get_total_magnetic_energy(bx_3D, by_3D, bz_3D, target_ar_gen):
+def get_total_magnetic_energy(bx_3D, by_3D, bz_3D):
     """
     Calculate the total magnetic energy in a Cartesian volume.
     =================================================
     Parameters:
     - bx_3D, by_3D, bz_3D : 3D numpy arrays representing magnetic field components in x, y, z directions.
-    - target_ar_gen : The targetARGen of the volume file.
 
     This function computes total volume magnetic energy. The units for magnetic energy in cgs are ergs. The formula B^2/8*PI integrated over all space, dV
     automatically yields erg for an input B in Gauss. Note that the 8*PI can come out of the integral; thus, the integral is over B^2 dV and the 8*PI is divided at the end.
@@ -62,8 +61,12 @@ def get_total_magnetic_energy(bx_3D, by_3D, bz_3D, target_ar_gen):
     global dx, dy, dz, dV
         
     # Read in FITS headers
-    cdelt1 = (math.atan((bitmap.meta['rsun_ref']*bitmap.meta['cdelt1']*np.pi/180)/(bitmap.meta['dsun_obs'])))*(180/np.pi)*(3600)  
-    dx = (cdelt1*(bitmap.meta['rsun_ref']/bitmap.meta['rsun_obs'])*100.0) 
+    xratio_volume_to_hmi = 400/bitmap.data.shape[1]
+    yratio_volume_to_hmi = 200/bitmap.data.shape[0]
+    cdelt1 = (math.atan((bitmap.meta['rsun_ref']*(bitmap.meta['cdelt1'] * xratio_volume_to_hmi)*np.pi/180)/(bitmap.meta['dsun_obs'])))*(180/np.pi)*(3600)  
+    dx = (cdelt1*(bitmap.meta['rsun_ref']/bitmap.meta['rsun_obs'])*100.0)
+    cdelt2 = (math.atan((bitmap.meta['rsun_ref']*(bitmap.meta['cdelt2'] * yratio_volume_to_hmi)*np.pi/180)/(bitmap.meta['dsun_obs'])))*(180/np.pi)*(3600)
+    dy = (cdelt2*(bitmap.meta['rsun_ref']/bitmap.meta['rsun_obs'])*100.0)
 
     # Calculate the squared magnetic field magnitude at each point
     mu_0 = 8 * np.pi   # 8π appears due to the CGS formulation of Maxwell's equations.
@@ -73,8 +76,7 @@ def get_total_magnetic_energy(bx_3D, by_3D, bz_3D, target_ar_gen):
     energy_density = B_squared / (mu_0)
     
     # Integrate the energy density over the volume
-    dy = dx
-    dz = dx
+    dz = dx # NOTE: approximation that we're currently using, but there's probably a much more precise value we can calculate here
     dV = dx * dy * dz  # Volume of each grid cell
     total_energy = np.sum(energy_density) * dV
 
@@ -418,7 +420,7 @@ def main():
 
     for (bx_3D_blob, by_3D_blob, bz_3D_blob, blob_lat, blob_lon, blob_index) in segmented_volumes:
         try:
-            tot_mag_energy = get_total_magnetic_energy(bx_3D_blob, by_3D_blob, bz_3D_blob, target_ar_gen)
+            tot_mag_energy = get_total_magnetic_energy(bx_3D_blob, by_3D_blob, bz_3D_blob)
             tot_unsigned_current_helicity = get_total_unsigned_current_helicity(bx_3D_blob, by_3D_blob, bz_3D_blob)
             tot_abs_net_current_helicity = get_total_absolute_net_current_helicity(bx_3D_blob, by_3D_blob, bz_3D_blob)
             mean_shear_angle = get_mean_shear_angle(bx_3D_blob, by_3D_blob, bz_3D_blob)
@@ -434,8 +436,8 @@ def main():
             exit(1)
 
         # Make a new DF with the calculated parameters as one row and save it as a pickle file.
-        df = pd.DataFrame(columns=['Filename General', 'Latitude', 'Carrington Longitude', 'Volume Total Magnetic Energy', 'Volume Total Unsigned Current Helicity', 'Volume Total Absolute Net Current Helicity', 'Volume Mean Shear Angle', 'Volume Total Unsigned Volume Vertical Current', 'Volume Twist Parameter Alpha', 'Volume Mean Gradient of Vertical Magnetic Field', 'Volume Mean Gradient of Total Magnetic Field', 'Volume Total Magnitude of Lorentz Force', 'Volume Total Unsigned Magnetic Flux'])
-        df.loc[0] = [target_ar_gen, blob_lat, blob_lon, tot_mag_energy, tot_unsigned_current_helicity, tot_abs_net_current_helicity, mean_shear_angle, tot_unsigned_volume_vertical_current, twist_param_alpha, mean_grad_vert_mag_field, mean_grad_total_mag_field, tot_mag_lorentz_force, tot_unsigned_mag_flux]
+        df = pd.DataFrame(columns=['Filename General', 'Blob Index', 'Latitude', 'Carrington Longitude', 'Volume Total Magnetic Energy', 'Volume Total Unsigned Current Helicity', 'Volume Total Absolute Net Current Helicity', 'Volume Mean Shear Angle', 'Volume Total Unsigned Volume Vertical Current', 'Volume Twist Parameter Alpha', 'Volume Mean Gradient of Vertical Magnetic Field', 'Volume Mean Gradient of Total Magnetic Field', 'Volume Total Magnitude of Lorentz Force', 'Volume Total Unsigned Magnetic Flux'])
+        df.loc[0] = [target_ar_gen, blob_index, blob_lat, blob_lon, tot_mag_energy, tot_unsigned_current_helicity, tot_abs_net_current_helicity, mean_shear_angle, tot_unsigned_volume_vertical_current, twist_param_alpha, mean_grad_vert_mag_field, mean_grad_total_mag_field, tot_mag_lorentz_force, tot_unsigned_mag_flux]
         # save as pickle file to OutputData/Temp with same name as target_ar_gen
         df.to_pickle(os.path.join(rootDir, 'OutputData', 'Temp', f'{target_ar_gen}-{blob_index}.pkl'))
 
