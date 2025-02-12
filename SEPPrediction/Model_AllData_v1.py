@@ -102,6 +102,7 @@ for year in years:
     grouped = blobs_in_year.groupby('Relevant Active Regions')['Produced an SEP'].max()  # max() checks if any record has SEP=1
 
     # If there is only one active region for which an SEP has been produced, include it in the training set and do a random split on the rest of the dataset from that year
+    # This is because the train_test_split had a special bad case for for less than 2 samples of a class
     if grouped[grouped == 1].count() == 1:
         min_train_regions = grouped[grouped == 1].index
         # split the rest randomly between train and test
@@ -119,25 +120,36 @@ for year in years:
     train_from_year = blobs_in_year[blobs_in_year['Relevant Active Regions'].isin(train_regions)]
     test_from_year = blobs_in_year[blobs_in_year['Relevant Active Regions'].isin(test_regions)]
 
-    # print the regions where 'Produced an SEP' is 1 for both train and test
-    print('Len train set:', len(train_from_year))
-    print('Len test set:', len(test_from_year))
-    print('Train regions with SEPs:', train_from_year[train_from_year['Produced an SEP'] == 1]['Relevant Active Regions'].unique())
-    print('Test regions with SEPs:', test_from_year[test_from_year['Produced an SEP'] == 1]['Relevant Active Regions'].unique())
-
-    continue
-
     # Stratify again within the train set to create a validation set
     grouped_train = train_from_year.groupby('Relevant Active Regions')['Produced an SEP'].max()
-    train_regions, val_regions = train_test_split(
-        grouped_train.index, test_size=0.25, stratify=grouped_train
-    )
+
+    if grouped_train[grouped_train == 1].count() == 1:
+        # If there is only one active region for which an SEP has been produced, include it in the training set and do a random split on the rest of the dataset from that year
+        min_train_regions = grouped_train[grouped_train == 1].index
+        # split the rest randomly between train and validation
+        remaining_train_regions, val_regions = train_test_split(
+            grouped_train[grouped_train == 0].index, test_size=0.25
+        )
+        train_regions = np.concatenate([min_train_regions, remaining_train_regions])
+    else:
+        train_regions, val_regions = train_test_split(
+            grouped_train.index, test_size=0.25, stratify=grouped_train
+        )
 
     # Select records for train and validation
     train_from_year = train_from_year[train_from_year['Relevant Active Regions'].isin(train_regions)]
     val_from_year = train_from_year[train_from_year['Relevant Active Regions'].isin(val_regions)]
 
-    # Now, train, validation, and test sets contain entire active regions without leakage
+    # Now, train, validation, and test sets contain entire active regions with minimal leakage
+
+    # print the regions where 'Produced an SEP' is 1 for both train and test
+    print('Len train set:', len(train_from_year))
+    print('Len val set:', len(val_from_year))
+    print('Len test set:', len(test_from_year))
+
+    print('Train regions with SEPs:', train_from_year[train_from_year['Produced an SEP'] == 1]['Relevant Active Regions'].unique())
+    print('Val regions with SEPs:', val_from_year[val_from_year['Produced an SEP'] == 1]['Relevant Active Regions'].unique())
+    print('Test regions with SEPs:', test_from_year[test_from_year['Produced an SEP'] == 1]['Relevant Active Regions'].unique())
 
     """"""
 
@@ -145,6 +157,7 @@ for year in years:
     # train_from_year, val_from_year = train_test_split(train_from_year, test_size=0.25, stratify=train_from_year['Produced an SEP'])
 
     if len(train_from_year) == 0 or len(val_from_year) == 0 or len(test_from_year) == 0:
+        print('This is literally impossible.')
         print('Year:', year, 'has no data in one of the sets. Skipping.')
 
     train_df = pd.concat([train_df, train_from_year])
