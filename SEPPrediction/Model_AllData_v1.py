@@ -104,10 +104,19 @@ for year in years:
     # Determine whether each activeRegionNum has produced an SEP at least once
     grouped = blobs_in_year.groupby('Relevant Active Regions')['Produced an SEP'].max()  # max() checks if any record has SEP=1
 
-    # Split active region groups into train and test while preserving class balance
-    train_regions, test_regions = train_test_split(
-        grouped.index, test_size=0.2, stratify=grouped
-    )
+    # If there is only one active region for which an SEP has been produced, include it in the training set and do a random split on the rest of the dataset from that year
+    if grouped[grouped == 1].count() == 1:
+        min_train_regions = grouped[grouped == 1].index
+        # split the rest randomly between train and test
+        remaining_train_regions, test_regions = train_test_split(
+            grouped[grouped == 0].index, test_size=0.2
+        )
+        train_regions = pd.concat([min_train_regions, remaining_train_regions])
+    else:
+        # Split active region groups into train and test while preserving class balance
+        train_regions, test_regions = train_test_split(
+            grouped.index, test_size=0.2, stratify=grouped
+        )
 
     # Select records based on their active region
     train_from_year = blobs_in_year[blobs_in_year['Relevant Active Regions'].isin(train_regions)]

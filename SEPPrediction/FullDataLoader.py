@@ -58,7 +58,7 @@ class SEPInputDataGenerator(tf.keras.utils.Sequence):
             np.random.shuffle(self.indexes)
 
     def __len__(self):
-        return len(self.filepaths) // self.batch_size
+        return len(self.blob_df) // self.batch_size
 
     # TODO: Need to check performance of this function. Map loading takes a long time, so make sure batch size
     # is large enough and that parallelization is taking place.
@@ -152,7 +152,8 @@ class SEPInputDataGenerator(tf.keras.utils.Sequence):
             for i in range(1, SEPInputDataGenerator.TIMESERIES_STEPS):
                 prev_time = row['datetime'] - pd.Timedelta(hours=4*i)
                 prev_time_str = prev_time.strftime('%Y%m%d_%H%M%S_TAI')
-                prev_filename_general = f'{'.'.join(filename_general.split('.')[:-1])}.{prev_time_str}'
+                prev_filename_part = '.'.join(filename_general.split('.')[:-1])
+                prev_filename_general = f'{prev_filename_part}.{prev_time_str}'
                 prev_blob_df = self.blob_df[
                     (self.blob_df['Filename General'] == prev_filename_general) &
                     (self.blob_df['Blob Index'] == curr_blob_index)
