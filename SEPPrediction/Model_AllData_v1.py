@@ -107,13 +107,13 @@ for year in years:
         min_train_regions = grouped[grouped == 1].index
         # split the rest randomly between train and test
         remaining_train_regions, test_regions = train_test_split(
-            grouped[grouped == 0].index, test_size=0.2
+            grouped[grouped == 0].index, test_size=0.2, random_state=42
         )
         train_regions = np.concatenate([min_train_regions, remaining_train_regions])
     else:
         # Split active region groups into train and test while preserving class balance
         train_regions, test_regions = train_test_split(
-            grouped.index, test_size=0.2, stratify=grouped
+            grouped.index, test_size=0.2, stratify=grouped, random_state=42
         )
 
     # Select records based on their active region
@@ -122,32 +122,36 @@ for year in years:
 
     # Stratify again within the train set to create a validation set
     grouped_train = train_from_year.groupby('Relevant Active Regions')['Produced an SEP'].max()
-
+    #print('grouped_train for train/val split:', grouped_train)
+    #print('where produced SEP:', grouped_train[grouped_train == 1].count())
     if grouped_train[grouped_train == 1].count() == 1:
         # If there is only one active region for which an SEP has been produced, include it in the training set and do a random split on the rest of the dataset from that year
         min_train_regions = grouped_train[grouped_train == 1].index
         # split the rest randomly between train and validation
         remaining_train_regions, val_regions = train_test_split(
-            grouped_train[grouped_train == 0].index, test_size=0.25
+            grouped_train[grouped_train == 0].index, test_size=0.25, random_state=42
         )
         train_regions = np.concatenate([min_train_regions, remaining_train_regions])
     else:
         train_regions, val_regions = train_test_split(
-            grouped_train.index, test_size=0.25, stratify=grouped_train
+            grouped_train.index, test_size=0.25, stratify=grouped_train, random_state=42
         )
 
+    #print('train_regions:', train_regions)
+    #print('val_regions:', val_regions)
+
     # Select records for train and validation
-    train_from_year = train_from_year[train_from_year['Relevant Active Regions'].isin(train_regions)]
+    new_train_from_year = train_from_year[train_from_year['Relevant Active Regions'].isin(train_regions)]
     val_from_year = train_from_year[train_from_year['Relevant Active Regions'].isin(val_regions)]
 
     # Now, train, validation, and test sets contain entire active regions with minimal leakage
 
     # print the regions where 'Produced an SEP' is 1 for both train and test
-    print('Len train set:', len(train_from_year))
+    print('Len train set:', len(new_train_from_year))
     print('Len val set:', len(val_from_year))
     print('Len test set:', len(test_from_year))
 
-    print('Train regions with SEPs:', train_from_year[train_from_year['Produced an SEP'] == 1]['Relevant Active Regions'].unique())
+    print('Train regions with SEPs:', new_train_from_year[train_from_year['Produced an SEP'] == 1]['Relevant Active Regions'].unique())
     print('Val regions with SEPs:', val_from_year[val_from_year['Produced an SEP'] == 1]['Relevant Active Regions'].unique())
     print('Test regions with SEPs:', test_from_year[test_from_year['Produced an SEP'] == 1]['Relevant Active Regions'].unique())
 
@@ -156,11 +160,11 @@ for year in years:
     # train_from_year, test_from_year = train_test_split(blobs_in_year, test_size=0.2, stratify=blobs_in_year['Produced an SEP'])
     # train_from_year, val_from_year = train_test_split(train_from_year, test_size=0.25, stratify=train_from_year['Produced an SEP'])
 
-    if len(train_from_year) == 0 or len(val_from_year) == 0 or len(test_from_year) == 0:
+    if len(new_train_from_year) == 0 or len(val_from_year) == 0 or len(test_from_year) == 0:
         print('This is literally impossible.')
         print('Year:', year, 'has no data in one of the sets. Skipping.')
 
-    train_df = pd.concat([train_df, train_from_year])
+    train_df = pd.concat([train_df, new_train_from_year])
     val_df = pd.concat([val_df, val_from_year])
     test_df = pd.concat([test_df, test_from_year])
 
