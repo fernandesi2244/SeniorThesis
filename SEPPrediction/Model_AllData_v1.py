@@ -5,6 +5,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 import time
 import multiprocessing
+import numpy as np
 
 def build_model():
     """
@@ -71,10 +72,6 @@ blob_df['Produced an SEP'] = (blob_df['Number of SEPs Produced'] > 0) * 1 # 1 if
 blob_df['Year'] = blob_df['Filename General'].apply(lambda x: x.split('.')[3][0:4])
 blob_df['Is Plage'] = blob_df['Is Plage'].astype(int)
 
-# TODO: Remove this
-print(blob_df['Is Plage'])
-exit()
-
 # Just for overall batch count
 generator = SEPInputDataGenerator(blob_df, batch_size, True)
 print('Number of batches overall:', len(generator))
@@ -111,7 +108,7 @@ for year in years:
         remaining_train_regions, test_regions = train_test_split(
             grouped[grouped == 0].index, test_size=0.2
         )
-        train_regions = pd.concat([min_train_regions, remaining_train_regions])
+        train_regions = np.concatenate([min_train_regions, remaining_train_regions])
     else:
         # Split active region groups into train and test while preserving class balance
         train_regions, test_regions = train_test_split(
@@ -123,10 +120,12 @@ for year in years:
     test_from_year = blobs_in_year[blobs_in_year['Relevant Active Regions'].isin(test_regions)]
 
     # print the regions where 'Produced an SEP' is 1 for both train and test
+    print('Len train set:', len(train_from_year))
+    print('Len test set:', len(test_from_year))
     print('Train regions with SEPs:', train_from_year[train_from_year['Produced an SEP'] == 1]['Relevant Active Regions'].unique())
     print('Test regions with SEPs:', test_from_year[test_from_year['Produced an SEP'] == 1]['Relevant Active Regions'].unique())
 
-    exit()
+    continue
 
     # Stratify again within the train set to create a validation set
     grouped_train = train_from_year.groupby('Relevant Active Regions')['Produced an SEP'].max()
@@ -151,6 +150,8 @@ for year in years:
     train_df = pd.concat([train_df, train_from_year])
     val_df = pd.concat([val_df, val_from_year])
     test_df = pd.concat([test_df, test_from_year])
+
+exit()
 
 scaler = StandardScaler()
 cols_to_scale = SEPInputDataGenerator.BLOB_VECTOR_COLUMNS_GENERAL + SEPInputDataGenerator.BLOB_ONE_TIME_INFO
