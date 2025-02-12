@@ -6,7 +6,6 @@ from sklearn.model_selection import train_test_split
 import time
 import multiprocessing
 import numpy as np
-from imblearn.over_sampling import SMOTE
 
 def build_model():
     """
@@ -174,16 +173,6 @@ cols_to_scale = SEPInputDataGenerator.BLOB_VECTOR_COLUMNS_GENERAL + SEPInputData
 train_df[cols_to_scale] = scaler.fit_transform(train_df[cols_to_scale])
 val_df[cols_to_scale] = scaler.transform(val_df[cols_to_scale])
 test_df[cols_to_scale] = scaler.transform(test_df[cols_to_scale])
-
-# Oversample the training data with SMOTE @ sampling_strategy=0.65
-smote = SMOTE(sampling_strategy=0.65)
-labels_for_smote = train_df['Produced an SEP']
-train_df, labels_for_smote = smote.fit_resample(train_df, labels_for_smote)
-train_df['Produced an SEP'] = labels_for_smote
-
-print(train_df[train_df['Produced an SEP'] == 1][['Filename General', 'Relevant Active Regions', 'Produced an SEP']].head())
-
-exit()
 
 # Use the same random seed so that in case we do shuffling with a random seed in the
 # generator, we get the same shuffling for each set.
