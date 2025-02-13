@@ -9,22 +9,49 @@ import numpy as np
 
 def build_model():
     """
-    Input format per batch sample, where each bullet point is a numpy array in the overall numpy array:
-    - len(BLOB_ONE_TIME_INFO) = 9
-    - (TIMESERIES_STEPS, len(BLOB_VECTOR_COLUMNS_GENERAL)) = 27 * 6 = 162 elements total
-    - 200 x 400 x 100 x 3 (bx_3D, by_3D, bz_3D)
+    Input format per batch sample (all as flattened scalar values immediately following each other)
+    - BLOB_ONE_TIME_INFO (9 elements)
+    - TIMESERIES_STEPS * len(BLOB_VECTOR_COLUMNS_GENERAL) (27 * 6 = 162 elements)
+    - 200 * 400 * 100 * 3 (bx_3D, by_3D, bz_3D)
 
-    Do timeseries convolution on the TIMESERIES_STEPS arrays following the intial array.
-    Perform 3D convolution on the 3D magnetic field stacked array.
+    Make an array for each of the timeseries semantic vectors and do 1D time series
+    convolution on them.
+    Create a staked array of the 3D magnetic field components so that each component is a
+    separate channel, and perform 3D convolution on the resulting array.
     Combine the timeseries convolution results with the BLOB_ONE_TIME_INFO and
     3D magnetic field outputs with a dense layer.
     Output a single value with a sigmoid activation function representing the probability
     of an SEP event occurring within 24 hours of the current time step.
     """
 
-    one_time_info_input = tf.keras.layers.Input(shape=(len(SEPInputDataGenerator.BLOB_ONE_TIME_INFO),))
-    blob_vector_input = tf.keras.layers.Input(shape=(SEPInputDataGenerator.TIMESERIES_STEPS, len(SEPInputDataGenerator.BLOB_VECTOR_COLUMNS_GENERAL)))
-    volume_blob_input = tf.keras.layers.Input(shape=(200, 400, 100, 3))
+    complete_input_size = (len(SEPInputDataGenerator.BLOB_ONE_TIME_INFO) +
+                           SEPInputDataGenerator.TIMESERIES_STEPS * len(SEPInputDataGenerator.BLOB_VECTOR_COLUMNS_GENERAL) +
+                           200 * 400 * 100 * 3)
+
+    flattened_input = tf.keras.layers.Input(shape=(complete_input_size,))
+
+    # Split the input into the three main components
+
+    # One-time info
+    one_time_info_input = tf.keras.layers.Lambda(lambda x: x[:, 0:len(SEPInputDataGenerator.BLOB_ONE_TIME_INFO)])(flattened_input)
+
+    # Time-series data
+    start_idx = len(SEPInputDataGenerator.BLOB_ONE_TIME_INFO)
+    end_idx = start_idx + (SEPInputDataGenerator.TIMESERIES_STEPS * len(SEPInputDataGenerator.BLOB_VECTOR_COLUMNS_GENERAL))
+    blob_vector_input = tf.keras.layers.Lambda(lambda x: 
+        tf.reshape(x[:, start_idx:end_idx], (-1, SEPInputDataGenerator.TIMESERIES_STEPS, len(SEPInputDataGenerator.BLOB_VECTOR_COLUMNS_GENERAL)))
+    )(flattened_input)
+
+    # 3D magnetic field data
+    volume_start = end_idx
+    volume_blob_input = tf.keras.layers.Lambda(lambda x: 
+        tf.reshape(x[:, volume_start:], (-1, 200, 400, 100, 3))
+    )(flattened_input)
+
+
+    # one_time_info_input = tf.keras.layers.Input(shape=(len(SEPInputDataGenerator.BLOB_ONE_TIME_INFO),))
+    # blob_vector_input = tf.keras.layers.Input(shape=(SEPInputDataGenerator.TIMESERIES_STEPS, len(SEPInputDataGenerator.BLOB_VECTOR_COLUMNS_GENERAL)))
+    # volume_blob_input = tf.keras.layers.Input(shape=(200, 400, 100, 3))
 
     # Process the timeseries data
     # TODO: Try smaller kernel size and different number of layers
