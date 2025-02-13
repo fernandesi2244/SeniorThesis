@@ -75,10 +75,10 @@ class SEPInputDataGenerator(tf.keras.utils.Sequence):
             curr_blob_one_time_info = row[SEPInputDataGenerator.BLOB_ONE_TIME_INFO].values
             curr_blob_vector = row[SEPInputDataGenerator.BLOB_VECTOR_COLUMNS_GENERAL].values
 
-            overall_data_vector.append(curr_blob_one_time_info)
+            overall_data_vector.extend(curr_blob_one_time_info)
 
             blob_timeseries_vector = []
-            blob_timeseries_vector.append(curr_blob_vector)
+            blob_timeseries_vector.extend(curr_blob_vector)
             # overall_data_vector.append(curr_blob_vector)
 
             filename_general = row['Filename General']
@@ -165,14 +165,19 @@ class SEPInputDataGenerator(tf.keras.utils.Sequence):
                     prev_blob_vector = prev_blob_df.iloc[0][SEPInputDataGenerator.BLOB_VECTOR_COLUMNS_GENERAL].values
                     
                 # prev_blob_vectors.append(prev_blob_vector)
-                blob_timeseries_vector.append(prev_blob_vector)
+                blob_timeseries_vector.extend(prev_blob_vector)
 
 
             # overall_data_vector.extend(prev_blob_vectors)
-            overall_data_vector.append(blob_timeseries_vector)
+            overall_data_vector.extend(blob_timeseries_vector)
 
-            overall_data_vector.append(np.stack([bx_3D_blob, by_3D_blob, bz_3D_blob], axis=-1))
+            # overall_data_vector.append(np.stack([bx_3D_blob, by_3D_blob, bz_3D_blob], axis=-1))
+            # Instead of stacking, flatten out the 3D magnetic field components and extend the overall data vector
+            overall_data_vector.extend(bx_3D_blob.flatten())
+            overall_data_vector.extend(by_3D_blob.flatten())
+            overall_data_vector.extend(bz_3D_blob.flatten())
 
+            # overall_data_vector = np.array(overall_data_vector)
             overall_data_vector = np.array(overall_data_vector)
 
             x_data.append(overall_data_vector)

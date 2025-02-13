@@ -203,8 +203,8 @@ print('Using', cpus_to_use, 'CPUs.')
 
 model.fit(train_generator, epochs=10, validation_data=val_generator,
             callbacks=[early_stopping, reduce_lr, checkpoint],
-            use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2 # TODO: Play around with this
-            )
+            # use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2 # TODO: Play around with this
+            ) # TODO: Figure out how to add the multiprocessing back
 
 # Print the time that has elapsed during training
 print('Training time:', time.time() - start)
