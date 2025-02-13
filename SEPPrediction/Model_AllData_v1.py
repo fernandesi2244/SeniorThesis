@@ -242,15 +242,22 @@ model = build_model()
 # Define some callbacks to improve training.
 early_stopping = tf.keras.callbacks.EarlyStopping(monitor="val_loss", patience=10)
 reduce_lr = tf.keras.callbacks.ReduceLROnPlateau(monitor="val_loss", patience=5)
-checkpoint = tf.keras.callbacks.ModelCheckpoint("sep_prediction_v1_checkpoint.keras", save_best_only=True)
+checkpoint_best_every_50 = tf.keras.callbacks.ModelCheckpoint(
+    "sep_prediction_all_data_v1_checkpoint_best_every_50.keras",
+    save_best_only=True,
+    save_freq=50, # save every 50 batches
+)
+checkpoint_every_50 = tf.keras.callbacks.ModelCheckpoint(
+    "sep_prediction_all_data_v1_checkpoint_every_50.keras",
+    save_best_only=False,
+    save_freq=50, # save every 50 batches
+)
 
 # Start timer
 start = time.time()
 
 model.fit(train_generator, epochs=10, validation_data=val_generator,
-            callbacks=[early_stopping, reduce_lr, checkpoint],
-            # use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2 # TODO: Play around with this
-            ) # TODO: Figure out how to add the multiprocessing back
+            callbacks=[early_stopping, reduce_lr, checkpoint_best_every_50, checkpoint_every_50])
 
 # Print the time that has elapsed during training
 print('Training time:', time.time() - start)
@@ -260,4 +267,4 @@ val_loss = model.evaluate(val_generator)
 print('Val loss:', val_loss)
 
 # Save the model
-model.save('sep_prediction_v1_model.keras')
+model.save('sep_prediction_all_data_v1_model.keras')
