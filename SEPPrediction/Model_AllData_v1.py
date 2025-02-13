@@ -81,7 +81,7 @@ def build_model():
     # Output layer
     output = tf.keras.layers.Dense(1, activation='sigmoid')(combined_data)
 
-    model = tf.keras.Model(inputs=[one_time_info_input, blob_vector_input, volume_blob_input], outputs=output)
+    model = tf.keras.Model(inputs=flattened_input, outputs=output)
 
     model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy', tf.keras.metrics.AUC(), tf.keras.metrics.Precision(), tf.keras.metrics.Recall()])
 
