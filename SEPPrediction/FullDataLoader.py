@@ -38,7 +38,9 @@ class SEPInputDataGenerator(tf.keras.utils.Sequence):
     BLOB_ONE_TIME_INFO = ['Number of Recent Flares', 'Max Class Type of Recent Flares', 'Number of Recent CMEs', 'Max Product of Half Angle and Speed of Recent CMEs', 'Number of Sunspots', 'Max Flare Peak of Recent Flares', 'Min Temperature of Recent Flares', 'Median Emission Measure of Recent Flares', 'Median Duration of Recent Flares']
     TIMESERIES_STEPS = 6
 
-    def __init__(self, blob_df, batch_size, shuffle):
+    def __init__(self, blob_df, batch_size, shuffle, **kwargs):
+        super().__init__(**kwargs)  # For multiprocessing parameters
+
         self.blob_df = blob_df
         self.batch_size = batch_size
         self.shuffle = shuffle

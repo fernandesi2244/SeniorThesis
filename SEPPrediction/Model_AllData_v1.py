@@ -207,9 +207,12 @@ train_df = train_df.sample(frac=1, random_state=42).reset_index(drop=True)
 val_df = val_df.sample(frac=1, random_state=42).reset_index(drop=True)
 test_df = test_df.sample(frac=1, random_state=42).reset_index(drop=True)
 
-train_generator = SEPInputDataGenerator(train_df, batch_size, True)
-val_generator = SEPInputDataGenerator(val_df, batch_size, True)
-test_generator = SEPInputDataGenerator(test_df, batch_size, True)
+cpus_to_use = max(int(multiprocessing.cpu_count() * 0.9), 1)
+print('Using', cpus_to_use, 'CPUs.')
+
+train_generator = SEPInputDataGenerator(train_df, batch_size, True, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
+val_generator = SEPInputDataGenerator(val_df, batch_size, True, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
+test_generator = SEPInputDataGenerator(test_df, batch_size, True, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
 
 print('Number of batches in train:', len(train_generator))
 print('Number of batches in val:', len(val_generator))
@@ -224,9 +227,6 @@ checkpoint = tf.keras.callbacks.ModelCheckpoint("sep_prediction_v1_checkpoint.ke
 
 # Start timer
 start = time.time()
-
-cpus_to_use = max(int(multiprocessing.cpu_count() * 0.9), 1)
-print('Using', cpus_to_use, 'CPUs.')
 
 model.fit(train_generator, epochs=10, validation_data=val_generator,
             callbacks=[early_stopping, reduce_lr, checkpoint],
