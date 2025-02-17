@@ -14,10 +14,10 @@ import matplotlib.pyplot as plt
 # See if there are any ways to deal with this appropriately.
 
 
-file_path = '../OutputData/UnifiedActiveRegionData.csv'
+file_path = '../OutputData/UnifiedActiveRegionData_with_all_events.csv'
 df = pd.read_csv(file_path)
 
-columns = ['Latitude', 'Carrington Longitude', 'Volume Total Magnetic Energy', 'Volume Total Unsigned Current Helicity', 'Volume Total Absolute Net Current Helicity', 'Volume Mean Shear Angle', 'Volume Total Unsigned Volume Vertical Current', 'Volume Twist Parameter Alpha', 'Volume Mean Gradient of Vertical Magnetic Field', 'Volume Mean Gradient of Total Magnetic Field', 'Volume Total Magnitude of Lorentz Force', 'Volume Total Unsigned Magnetic Flux', 'Gradient_00', 'Gradient_10', 'Gradient_30', 'Gradient_50', 'Shear_00', 'Shear_10', 'Shear_30', 'Shear_50', 'Phi', 'Total Unsigned Current Helicity', 'Total Photospheric Magnetic Free Energy Density', 'Total Unsigned Vertical Current', 'Abs of Net Current helicity', 'Number of Sunspots', 'Number of SEPs Produced', 'Number of Recent Flares', 'Max Class Type of Recent Flares', 'Number of Recent CMEs', 'Max Product of Half Angle and Speed of Recent CMEs', 'Stonyhurst Longitude']
+columns = ['Latitude', 'Carrington Longitude', 'Stonyhurst Longitude', 'Volume Total Magnetic Energy', 'Volume Total Unsigned Current Helicity', 'Volume Total Absolute Net Current Helicity', 'Volume Mean Shear Angle', 'Volume Total Unsigned Volume Vertical Current', 'Volume Twist Parameter Alpha', 'Volume Mean Gradient of Vertical Magnetic Field', 'Volume Mean Gradient of Total Magnetic Field', 'Volume Total Magnitude of Lorentz Force', 'Volume Total Unsigned Magnetic Flux', 'Gradient_00', 'Gradient_10', 'Gradient_30', 'Gradient_50', 'Shear_00', 'Shear_10', 'Shear_30', 'Shear_50', 'Phi', 'Total Unsigned Current Helicity', 'Total Photospheric Magnetic Free Energy Density', 'Total Unsigned Vertical Current', 'Abs of Net Current helicity', 'Number of Sunspots', 'Number of SEPs Produced', 'Number of Recent Flares', 'Max Class Type of Recent Flares', 'Number of Recent CMEs', 'Max Product of Half Angle and Speed of Recent CMEs', 'Max Flare Peak of Recent Flares', 'Min Temperature of Recent Flares', 'Median Emission Measure of Recent Flares', 'Median Duration of Recent Flares']
 
 df_inclusion_mask = pd.Series([True] * len(df), index=df.index)
 
@@ -61,3 +61,6 @@ for column in columns:
 
 df = df[df_inclusion_mask]
 # df.to_csv(file_path, index=False)
+
+# This file is just for distribution visualization purposes right now because the
+# current outlier detection method does not work well with skewed data.

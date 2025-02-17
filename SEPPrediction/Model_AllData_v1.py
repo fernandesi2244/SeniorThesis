@@ -92,7 +92,7 @@ def build_model():
 
     return model
 
-blob_df_filename = '../OutputData/UnifiedActiveRegionData_with_all_events.csv'
+blob_df_filename = '../OutputData/UnifiedActiveRegionData_with_all_events_including_new_flares.csv'
 blob_df = pd.read_csv(blob_df_filename)
 batch_size = 5
 shuffle = True

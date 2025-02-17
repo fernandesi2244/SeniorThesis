@@ -41,34 +41,57 @@ def build_model():
     # Process the timeseries data
     # TODO: Try smaller kernel size and different number of layers
     timeseries_conv = tf.keras.layers.Conv1D(16, 3, activation='relu')(blob_vector_input)
+    timeseries_conv = tf.keras.layers.BatchNormalization()(timeseries_conv)
     timeseries_conv = tf.keras.layers.Conv1D(32, 2, activation='relu')(timeseries_conv)
+    timeseries_conv = tf.keras.layers.BatchNormalization()(timeseries_conv)
     timeseries_conv = tf.keras.layers.Flatten()(timeseries_conv)
 
-    # Combine the one-time info, timeseries, and 3D magnetic field component data with a dense layer
+    # Combine the one-time info and timeseries data with a dense layer
     combined_data = tf.keras.layers.concatenate([one_time_info_input, timeseries_conv])
     combined_data = tf.keras.layers.Dense(64, activation='relu')(combined_data)
+    combined_data = tf.keras.layers.BatchNormalization()(combined_data)
     combined_data = tf.keras.layers.Dropout(0.2)(combined_data) # TODO: Play around with more dropout layers
 
     # Output layer
     output = tf.keras.layers.Dense(1, activation='sigmoid')(combined_data)
+    # Prevents log(0) issue
+    epsilon = 1e-10
+    output = tf.keras.layers.Lambda(lambda x: tf.clip_by_value(x, epsilon, 1 - epsilon))(output)
 
     model = tf.keras.Model(inputs=flattened_input, outputs=output)
 
-    model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy', tf.keras.metrics.AUC(), tf.keras.metrics.Precision(), tf.keras.metrics.Recall()])
+    model.compile(
+                  optimizer='adam',
+                  loss='binary_crossentropy',
+                  metrics=['accuracy', tf.keras.metrics.AUC(), tf.keras.metrics.Precision(), tf.keras.metrics.Recall()]
+                 )
 
     # TODO: print out model architecture and parameter count stats
     model.summary()
 
     return model
 
-blob_df_filename = '../OutputData/UnifiedActiveRegionData_with_all_events.csv'
+blob_df_filename = '../OutputData/UnifiedActiveRegionData_with_all_events_including_new_flares.csv'
 blob_df = pd.read_csv(blob_df_filename)
-batch_size = 5
+batch_size = 32
 shuffle = True
 
 blob_df['Produced an SEP'] = (blob_df['Number of SEPs Produced'] > 0) * 1 # 1 if produced, 0 O.W.
 blob_df['Year'] = blob_df['Filename General'].apply(lambda x: x.split('.')[3][0:4])
 blob_df['Is Plage'] = blob_df['Is Plage'].astype(int)
+"""
+'Relevant Active Regions' format is either:
+- '[13267]'
+- '[13268, 13267]'
+- '['9276-2']'
+
+The most probable AR number for the above are:
+- '13267'
+- '13268' (the first num in the string list)
+- '9276-2' (the string as is)
+
+"""
+blob_df['Most Probable AR Num'] = blob_df['Relevant Active Regions'].apply(lambda x: x.strip("[]'").split(',')[0])
 
 # Just for overall batch count
 generator = SEPInputDataGenerator(blob_df, batch_size, True)
@@ -97,7 +120,7 @@ for year in years:
 
     """"""
     # Determine whether each activeRegionNum has produced an SEP at least once
-    grouped = blobs_in_year.groupby('Relevant Active Regions')['Produced an SEP'].max()  # max() checks if any record has SEP=1
+    grouped = blobs_in_year.groupby('Most Probable AR Num')['Produced an SEP'].max()  # max() checks if any record has SEP=1
 
     # If there is only one active region for which an SEP has been produced, include it in the training set and do a random split on the rest of the dataset from that year
     # This is because the train_test_split had a special bad case for for less than 2 samples of a class
@@ -115,11 +138,11 @@ for year in years:
         )
 
     # Select records based on their active region
-    train_from_year = blobs_in_year[blobs_in_year['Relevant Active Regions'].isin(train_regions)]
-    test_from_year = blobs_in_year[blobs_in_year['Relevant Active Regions'].isin(test_regions)]
+    train_from_year = blobs_in_year[blobs_in_year['Most Probable AR Num'].isin(train_regions)]
+    test_from_year = blobs_in_year[blobs_in_year['Most Probable AR Num'].isin(test_regions)]
 
     # Stratify again within the train set to create a validation set
-    grouped_train = train_from_year.groupby('Relevant Active Regions')['Produced an SEP'].max()
+    grouped_train = train_from_year.groupby('Most Probable AR Num')['Produced an SEP'].max()
     #print('grouped_train for train/val split:', grouped_train)
     #print('where produced SEP:', grouped_train[grouped_train == 1].count())
     if grouped_train[grouped_train == 1].count() == 1:
@@ -139,8 +162,8 @@ for year in years:
     #print('val_regions:', val_regions)
 
     # Select records for train and validation
-    new_train_from_year = train_from_year[train_from_year['Relevant Active Regions'].isin(train_regions)]
-    val_from_year = train_from_year[train_from_year['Relevant Active Regions'].isin(val_regions)]
+    new_train_from_year = train_from_year[train_from_year['Most Probable AR Num'].isin(train_regions)]
+    val_from_year = train_from_year[train_from_year['Most Probable AR Num'].isin(val_regions)]
 
     # Now, train, validation, and test sets contain entire active regions with minimal leakage
 
@@ -149,9 +172,9 @@ for year in years:
     print('Len val set:', len(val_from_year))
     print('Len test set:', len(test_from_year))
 
-    print('Train regions with SEPs:', new_train_from_year[train_from_year['Produced an SEP'] == 1]['Relevant Active Regions'].unique())
-    print('Val regions with SEPs:', val_from_year[val_from_year['Produced an SEP'] == 1]['Relevant Active Regions'].unique())
-    print('Test regions with SEPs:', test_from_year[test_from_year['Produced an SEP'] == 1]['Relevant Active Regions'].unique())
+    print('Train regions with SEPs:', new_train_from_year[train_from_year['Produced an SEP'] == 1]['Most Probable AR Num'].unique())
+    print('Val regions with SEPs:', val_from_year[val_from_year['Produced an SEP'] == 1]['Most Probable AR Num'].unique())
+    print('Test regions with SEPs:', test_from_year[test_from_year['Produced an SEP'] == 1]['Most Probable AR Num'].unique())
 
     """"""
 
@@ -179,6 +202,7 @@ print('Before resampling:')
 print('Train set count:', len(train_df))
 print('Train set SEP count:', train_df['Produced an SEP'].sum())
 
+# NOTE: ~37.5x increase in number of SEPs in train set - is quite a huge increase, consider reducing the ratio
 ros = RandomOverSampler(sampling_strategy=0.325)
 train_df, _ = ros.fit_resample(train_df, train_df['Produced an SEP'])
 
@@ -189,6 +213,11 @@ print('After resampling:')
 print('Train set count:', len(train_df))
 print('Train set SEP count:', train_df['Produced an SEP'].sum())
 
+# Print the number of SEP-producing blobs in each set
+print('Train set SEP count:', train_df['Produced an SEP'].sum())
+print('Val set SEP count:', val_df['Produced an SEP'].sum())
+print('Test set SEP count:', test_df['Produced an SEP'].sum())
+
 # Use the same random seed so that in case we do shuffling with a random seed in the
 # generator, we get the same shuffling for each set.
 train_df = train_df.sample(frac=1, random_state=42).reset_index(drop=True)
@@ -197,6 +226,19 @@ test_df = test_df.sample(frac=1, random_state=42).reset_index(drop=True)
 
 cpus_to_use = max(int(multiprocessing.cpu_count() * 0.9), 1)
 print('Using', cpus_to_use, 'CPUs.')
+
+# Quick NaN check
+print('Quick train_df check before training')
+print(train_df.isna().sum())  # Check for NaNs
+print(np.isinf(train_df).sum())  # Check for Infs
+print(train_df.describe())
+
+print('Quick val_df check before training')
+print(val_df.isna().sum())  # Check for NaNs
+print(np.isinf(val_df).sum())  # Check for Infs
+print(val_df.describe())
+
+exit()
 
 train_generator = SEPInputDataGenerator(train_df, batch_size, True, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
 val_generator = SEPInputDataGenerator(val_df, batch_size, True, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
@@ -211,22 +253,22 @@ model = build_model()
 # Define some callbacks to improve training.
 early_stopping = tf.keras.callbacks.EarlyStopping(monitor="val_loss", patience=10)
 reduce_lr = tf.keras.callbacks.ReduceLROnPlateau(monitor="val_loss", patience=5)
-checkpoint_best_every_50 = tf.keras.callbacks.ModelCheckpoint(
-    "sep_prediction_numeric_data_v1_checkpoint_best_every_50.keras",
+checkpoint_best_every_20 = tf.keras.callbacks.ModelCheckpoint(
+    "sep_prediction_numeric_data_v2_checkpoint_best_every_20.keras",
     save_best_only=True,
-    save_freq=50, # save every 50 batches  
+    save_freq=20, # save every 20 batches  
 )
-checkpoint_every_50 = tf.keras.callbacks.ModelCheckpoint(
-    "sep_prediction_numeric_data_v1_checkpoint_every_50.keras",
+checkpoint_every_20 = tf.keras.callbacks.ModelCheckpoint(
+    "sep_prediction_numeric_data_v2_checkpoint_every_20.keras",
     save_best_only=False,
-    save_freq=50, # save every 50 batches  
+    save_freq=20, # save every 20 batches  
 )
 
 # Start timer
 start = time.time()
 
 model.fit(train_generator, epochs=10, validation_data=val_generator,
-            callbacks=[early_stopping, reduce_lr, checkpoint_best_every_50, checkpoint_every_50])
+            callbacks=[early_stopping, reduce_lr, checkpoint_best_every_20, checkpoint_every_20])
 
 # Print the time that has elapsed during training
 print('Training time:', time.time() - start)
@@ -236,4 +278,4 @@ val_loss = model.evaluate(val_generator)
 print('Val loss:', val_loss)
 
 # Save the model
-model.save('sep_prediction_numeric_data_v1_model.keras')
+model.save('sep_prediction_numeric_data_v2_model.keras')

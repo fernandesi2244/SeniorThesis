@@ -8,14 +8,12 @@ no ambiguity in which record to associate from the 2D dataset, which contains re
 each blob in a SHARP.
 """
 
-TODO: ADD IN TEBBS DATA, will need to update parameters in ML data loaders
-
 import pandas as pd
 import numpy as np
 
 # Load the 2D and 3D datasets
-data2D = pd.read_csv('../InputData/3_175_150_100_vector_hourly.csv')
-data3D = pd.read_csv('../InputData/volume_parameterizations_all_blobs_carved_from_bitmap.csv')
+data2D = pd.read_csv('../InputData/5_15_150_100_vector_hourly.csv')
+data3D = pd.read_csv('../InputData/volume_parameterizations_all_blobs_carved_exactly_dx_fix.csv')
 
 # Change the 'Filename General' column in the 2D dataset to match the 3D dataset
 # i.e., row_filename_base = row['Filename General'].split('/')[-1][:-1]

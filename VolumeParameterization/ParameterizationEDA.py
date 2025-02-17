@@ -4,7 +4,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 
-df = pd.read_csv("../InputData/volume_parameterizations_all_blobs_carved_from_bitmap.csv")
+df = pd.read_csv("../InputData/volume_parameterizations_all_blobs_carved_exactly_dx_fix.csv")
 
 # Columns are ['Filename General', 'Total Magnetic Energy', 'Total Unsigned Current Helicity', 'Total Absolute Net Current Helicity', 'Mean Shear Angle', 'Total Unsigned Volume Vertical Current', 'Twist Parameter Alpha', 'Mean Gradient of Vertical Magnetic Field', 'Mean Gradient of Total Magnetic Field', 'Total Magnitude of Lorentz Force', 'Total Unsigned Magnetic Flux']
 
