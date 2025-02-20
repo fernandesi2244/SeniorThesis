@@ -134,20 +134,14 @@ def add_events(row):
     relevant_TEBBS = TEBBS[TEBBS['AR'].apply(toIntString).isin(associatedARs)]
     relevant_TEBBS = relevant_TEBBS[(relevant_TEBBS['start time'].apply(toDatetime2) >= reference_datetime - datetime.timedelta(days=3))
                                     & (relevant_TEBBS['start time'].apply(toDatetime2) < reference_datetime)]
-    
+    relevant_TEBBS = relevant_TEBBS.dropna(subset=['Max flux', 'TMax', 'EMMax', 'duration'])
+
     if len(relevant_TEBBS) == 0:
         max_flare_peak = 0
         min_temperature = 0
         median_emission_measure = 0
         median_duration = 0
     else:
-        # Exclude TEBBS rows where any of these columns are NaN
-        len_before = len(relevant_TEBBS)
-        relevant_TEBBS = relevant_TEBBS.dropna(subset=['Max flux', 'TMax', 'EMMax', 'duration'])
-        len_after = len(relevant_TEBBS)
-        if len_after < len_before:
-            print('Dropped', len_before - len_after, 'TEBBS rows due to NaN values. For record:', row['Filename General'])
-
         # Get the max flare peak, min temperature, median emission measure, and median duration
         max_flare_peak = relevant_TEBBS['Max flux'].max()
         min_temperature = relevant_TEBBS['TMax'].min()
@@ -158,8 +152,6 @@ def add_events(row):
     row['Min Temperature of Recent Flares'] = min_temperature
     row['Median Emission Measure of Recent Flares'] = median_emission_measure
     row['Median Duration of Recent Flares'] = median_duration
-    
-    # TODO: Put these in the data loader, make sure to normalize and everything.
 
     # Do the same for CMEs
     CMEs_3_days_before = CMEs[(CMEs['startTime'].apply(toDatetime) >= reference_datetime - datetime.timedelta(days=3)) & (CMEs['startTime'].apply(toDatetime) < reference_datetime)]
@@ -206,4 +198,4 @@ def toIntString(floatNum):
 
 rowNum = 0
 unified_data = unified_data.apply(add_events, axis=1)
-unified_data.to_csv('../OutputData/UnifiedActiveRegionData_with_all_events_including_new_flares.csv', index=False)
+unified_data.to_csv('../OutputData/UnifiedActiveRegionData_with_all_events_including_new_flares_and_TEBBS_fix.csv', index=False)
