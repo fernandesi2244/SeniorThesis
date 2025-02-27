@@ -34,7 +34,9 @@ def apply_gaussian_filter(image):
     return image * bitmap
 
 class ImageSequenceGenerator(tf.keras.utils.Sequence):
-    def __init__(self, filepaths, sequence_length, batch_size, target_size):
+    def __init__(self, filepaths, sequence_length, batch_size, target_size, **kwargs):
+        super().__init__(**kwargs)  # For multiprocessing parameters
+
         self.sequence_length = sequence_length # using sequence_length images to predict the next one
         self.batch_size = batch_size
         self.target_size = target_size
@@ -103,7 +105,10 @@ filepaths = [os.path.join(directory, filepath) for filepath in filepaths]
 filepaths.sort()
 filepaths = filepaths[::4] # TODO: Play with later
 
-generator = ImageSequenceGenerator(filepaths, sequence_length, batch_size, target_size)
+cpus_to_use = max(int(multiprocessing.cpu_count() * 0.9), 1)
+print('Using', cpus_to_use, 'CPUs.')
+
+generator = ImageSequenceGenerator(filepaths, sequence_length, batch_size, target_size, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
 
 print('Number of batches overall:', len(generator))
 print('Length of each batch:', batch_size)
@@ -115,9 +120,9 @@ train_filepaths, test_filepaths = train_test_split(filepaths, test_size=0.2, shu
 train_filepaths, val_filepaths = train_test_split(train_filepaths, test_size=0.25, shuffle=False)
 
 # Create separate generators for the training, validation, and test sets
-train_generator = ImageSequenceGenerator(train_filepaths, sequence_length, batch_size, target_size)
-val_generator = ImageSequenceGenerator(val_filepaths, sequence_length, batch_size, target_size)
-test_generator = ImageSequenceGenerator(test_filepaths, sequence_length, batch_size, target_size)
+train_generator = ImageSequenceGenerator(train_filepaths, sequence_length, batch_size, target_size, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
+val_generator = ImageSequenceGenerator(val_filepaths, sequence_length, batch_size, target_size, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
+test_generator = ImageSequenceGenerator(test_filepaths, sequence_length, batch_size, target_size, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
 
 # No channels in image, so assume greyscale.
 model = build_model(sequence_length, target_size[0], target_size[1], 1)
@@ -130,12 +135,8 @@ checkpoint = keras.callbacks.ModelCheckpoint("next_frame_prediction_final_checkp
 # Start timer
 start = time.time()
 
-cpus_to_use = max(int(multiprocessing.cpu_count() * 0.9), 1)
-print('Using', cpus_to_use, 'CPUs.')
-
 model.fit(train_generator, epochs=10, validation_data=val_generator,
           callbacks=[early_stopping, reduce_lr, checkpoint],
-          use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2 # TODO: Play around with this
         )
 
 # Print the time that has elapsed during training
