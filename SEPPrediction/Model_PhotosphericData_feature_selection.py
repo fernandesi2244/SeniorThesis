@@ -1,4 +1,4 @@
-from NumericDataLoader import SEPInputDataGenerator
+from PhotosphericDataLoader import SEPInputDataGenerator
 import pandas as pd
 import numpy as np
 import time
@@ -10,10 +10,8 @@ from sklearn.metrics import accuracy_score, precision_score, recall_score, roc_a
 import matplotlib.pyplot as plt
 import seaborn as sns
 import joblib
-from imblearn.over_sampling import RandomOverSampler
-from imblearn.under_sampling import RandomUnderSampler
 
-NAME = 'sep_prediction_numeric_data_feature_importance'
+NAME = 'sep_prediction_photospheric_data_feature_importance'
 
 def build_feature_names():
     """
@@ -112,22 +110,6 @@ train_df[cols_to_scale] = scaler.fit_transform(train_df[cols_to_scale])
 val_df[cols_to_scale] = scaler.transform(val_df[cols_to_scale])
 test_df[cols_to_scale] = scaler.transform(test_df[cols_to_scale])
 
-# Randomly oversample the majority class and undersample the minority class in the training set for a better balance.
-# Use RandomOversampler w/a sampling strategy of 0.325 and then use RandomUndersampler w/a sampling strategy of 0.65.
-# These "more optimal" ratios were determined from the other NN models from junior year research.
-print('Before resampling:')
-print('Train set count:', len(train_df))
-print('Train set SEP count:', train_df['Produced an SEP'].sum())
-
-# NOTE: ~37.5x increase in number of SEPs in train set - is quite a huge increase, consider reducing the ratio
-ros = RandomOverSampler(sampling_strategy=0.325)
-train_df, _ = ros.fit_resample(train_df, train_df['Produced an SEP'])
-
-rus = RandomUnderSampler(sampling_strategy=0.65)
-train_df, _ = rus.fit_resample(train_df, train_df['Produced an SEP'])
-
-print('After resampling:')
-
 # Print dataset statistics
 print('\nDataset Statistics:')
 print(f'Train set size: {len(train_df)}, SEP events: {train_df["Produced an SEP"].sum()} ({train_df["Produced an SEP"].mean()*100:.2f}%)')
@@ -194,12 +176,16 @@ X_test = np.nan_to_num(X_test, nan=0.0, posinf=0.0, neginf=0.0)
 print('\nTraining Random Forest model...')
 start_time = time.time()
 
+# Calculate class weights to achieve 0.65 positive samples to 1 negative sample
+class_weight = {0: 1, 1: 0.65}
+
 # Initialize the model with custom class weights. TODO: Compare this to just using ROS/RUS
 rf_model = RandomForestClassifier(
     n_estimators=100,
     max_depth=15,
     min_samples_split=5,
     min_samples_leaf=2,
+    class_weight=class_weight,
     random_state=42,
     n_jobs=cpus_to_use
 )
