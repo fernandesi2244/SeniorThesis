@@ -196,16 +196,12 @@ X_test = np.nan_to_num(X_test, nan=0.0, posinf=0.0, neginf=0.0)
 print('\nTraining Random Forest model...')
 start_time = time.time()
 
-# Calculate class weights to achieve 0.65 positive samples to 1 negative sample
-class_weight = {0: 1, 1: 0.65}
-
 # Initialize the model with custom class weights. TODO: Compare this to just using ROS/RUS
 rf_model = RandomForestClassifier(
     n_estimators=100,
     max_depth=15,
     min_samples_split=5,
     min_samples_leaf=2,
-    class_weight=class_weight,
     random_state=42,
     n_jobs=cpus_to_use
 )
