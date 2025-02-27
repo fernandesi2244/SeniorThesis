@@ -10,6 +10,8 @@ from sklearn.metrics import accuracy_score, precision_score, recall_score, roc_a
 import matplotlib.pyplot as plt
 import seaborn as sns
 import joblib
+from imblearn.over_sampling import RandomOverSampler
+from imblearn.under_sampling import RandomUnderSampler
 
 NAME = 'sep_prediction_photospheric_data_feature_importance'
 
@@ -109,6 +111,22 @@ cols_to_scale = SEPInputDataGenerator.BLOB_VECTOR_COLUMNS_GENERAL + SEPInputData
 train_df[cols_to_scale] = scaler.fit_transform(train_df[cols_to_scale])
 val_df[cols_to_scale] = scaler.transform(val_df[cols_to_scale])
 test_df[cols_to_scale] = scaler.transform(test_df[cols_to_scale])
+
+# Randomly oversample the majority class and undersample the minority class in the training set for a better balance.
+# Use RandomOversampler w/a sampling strategy of 0.325 and then use RandomUndersampler w/a sampling strategy of 0.65.
+# These "more optimal" ratios were determined from the other NN models from junior year research.
+print('Before resampling:')
+print('Train set count:', len(train_df))
+print('Train set SEP count:', train_df['Produced an SEP'].sum())
+
+# NOTE: ~37.5x increase in number of SEPs in train set - is quite a huge increase, consider reducing the ratio
+ros = RandomOverSampler(sampling_strategy=0.325)
+train_df, _ = ros.fit_resample(train_df, train_df['Produced an SEP'])
+
+rus = RandomUnderSampler(sampling_strategy=0.65)
+train_df, _ = rus.fit_resample(train_df, train_df['Produced an SEP'])
+
+print('After resampling:')
 
 # Print dataset statistics
 print('\nDataset Statistics:')
