@@ -9,7 +9,7 @@ import numpy as np
 from imblearn.over_sampling import RandomOverSampler
 from imblearn.under_sampling import RandomUnderSampler
 
-NAME = 'sep_prediction_numeric_data_v1'
+NAME = 'sep_prediction_numeric_data_no_timeseries_v1'
 
 def build_model():
     """
@@ -35,22 +35,21 @@ def build_model():
     one_time_info_input = tf.keras.layers.Lambda(lambda x: x[:, 0:len(SEPInputDataGenerator.BLOB_ONE_TIME_INFO)])(flattened_input)
 
     # Time-series data
-    start_idx = len(SEPInputDataGenerator.BLOB_ONE_TIME_INFO)
-    blob_vector_input = tf.keras.layers.Lambda(lambda x: 
-        tf.reshape(x[:, start_idx:], (-1, SEPInputDataGenerator.TIMESERIES_STEPS, len(SEPInputDataGenerator.BLOB_VECTOR_COLUMNS_GENERAL)))
-    )(flattened_input)
+    # start_idx = len(SEPInputDataGenerator.BLOB_ONE_TIME_INFO)
+    # blob_vector_input = tf.keras.layers.Lambda(lambda x: 
+    #     tf.reshape(x[:, start_idx:], (-1, SEPInputDataGenerator.TIMESERIES_STEPS, len(SEPInputDataGenerator.BLOB_VECTOR_COLUMNS_GENERAL)))
+    # )(flattened_input)
 
     # Process the timeseries data
     # TODO: Try smaller kernel size and different number of layers
-    timeseries_conv = tf.keras.layers.Conv1D(16, 3, activation='relu')(blob_vector_input)
-    timeseries_conv = tf.keras.layers.BatchNormalization()(timeseries_conv)
-    timeseries_conv = tf.keras.layers.Conv1D(32, 2, activation='relu')(timeseries_conv)
-    timeseries_conv = tf.keras.layers.BatchNormalization()(timeseries_conv)
-    timeseries_conv = tf.keras.layers.Flatten()(timeseries_conv)
+    # timeseries_conv = tf.keras.layers.Conv1D(16, 3, activation='relu')(blob_vector_input)
+    # timeseries_conv = tf.keras.layers.BatchNormalization()(timeseries_conv)
+    # timeseries_conv = tf.keras.layers.Conv1D(32, 2, activation='relu')(timeseries_conv)
+    # timeseries_conv = tf.keras.layers.BatchNormalization()(timeseries_conv)
+    # timeseries_conv = tf.keras.layers.Flatten()(timeseries_conv)
 
     # Combine the one-time info and timeseries data with a dense layer
-    combined_data = tf.keras.layers.concatenate([one_time_info_input, timeseries_conv])
-    combined_data = tf.keras.layers.Dense(64, activation='relu')(combined_data)
+    combined_data = tf.keras.layers.Dense(32, activation='relu')(one_time_info_input)
     combined_data = tf.keras.layers.BatchNormalization()(combined_data)
     combined_data = tf.keras.layers.Dropout(0.2)(combined_data) # TODO: Play around with more dropout layers
 

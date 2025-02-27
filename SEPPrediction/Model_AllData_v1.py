@@ -9,6 +9,8 @@ import numpy as np
 from imblearn.over_sampling import RandomOverSampler
 from imblearn.under_sampling import RandomUnderSampler
 
+NAME = 'sep_prediction_all_data_v1'
+
 def build_model():
     """
     Input format per batch sample (all as flattened scalar values immediately following each other)
@@ -92,7 +94,7 @@ def build_model():
 
     return model
 
-blob_df_filename = '../OutputData/UnifiedActiveRegionData_with_all_events_including_new_flares.csv'
+blob_df_filename = '../OutputData/UnifiedActiveRegionData_with_all_events_including_new_flares_and_TEBBS_fix.csv'
 blob_df = pd.read_csv(blob_df_filename)
 batch_size = 5
 shuffle = True
@@ -243,12 +245,12 @@ model = build_model()
 early_stopping = tf.keras.callbacks.EarlyStopping(monitor="val_loss", patience=10)
 reduce_lr = tf.keras.callbacks.ReduceLROnPlateau(monitor="val_loss", patience=5)
 checkpoint_best_every_50 = tf.keras.callbacks.ModelCheckpoint(
-    "sep_prediction_all_data_v1_checkpoint_best_every_50.keras",
+    f"{NAME}_checkpoint_best_every_50.keras",
     save_best_only=True,
     save_freq=50, # save every 50 batches
 )
 checkpoint_every_50 = tf.keras.callbacks.ModelCheckpoint(
-    "sep_prediction_all_data_v1_checkpoint_every_50.keras",
+    f"{NAME}_checkpoint_every_50.keras",
     save_best_only=False,
     save_freq=50, # save every 50 batches
 )
@@ -267,4 +269,4 @@ val_loss = model.evaluate(val_generator)
 print('Val loss:', val_loss)
 
 # Save the model
-model.save('sep_prediction_all_data_v1_model.keras')
+model.save(f'{NAME}_model.keras')

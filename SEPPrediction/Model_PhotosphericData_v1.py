@@ -1,4 +1,4 @@
-from NumericDataLoader import SEPInputDataGenerator
+from PhotosphericDataLoader import SEPInputDataGenerator
 import tensorflow as tf
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
@@ -9,7 +9,7 @@ import numpy as np
 from imblearn.over_sampling import RandomOverSampler
 from imblearn.under_sampling import RandomUnderSampler
 
-NAME = 'sep_prediction_numeric_data_v1'
+NAME = 'sep_prediction_photospheric_data_v1'
 
 def build_model():
     """
