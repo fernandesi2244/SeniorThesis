@@ -155,6 +155,8 @@ def extract_all_data(generator):
     all_X = []
     all_y = []
     for i in range(len(generator)):
+        if i % 100 == 0:
+            print(f'Batch {i+1}/{len(generator)}')
         X_batch, y_batch = generator[i]
         all_X.append(X_batch)
         all_y.append(y_batch)
