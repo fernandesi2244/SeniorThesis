@@ -1,4 +1,4 @@
-from NumericDataLoader import SEPInputDataGenerator
+from PhotosphericDataLoader import SEPInputDataGenerator
 import pandas as pd
 import numpy as np
 import time
@@ -14,9 +14,9 @@ import joblib
 from imblearn.over_sampling import RandomOverSampler
 from imblearn.under_sampling import RandomUnderSampler
 
-NAME = 'sep_prediction_numeric_data_pca'
+NAME = 'sep_prediction_photospheric_data_pca'
 
-SELECTED_FEATURE_INDICES = [114, 1, 5, 87, 60, 33, 141, 0, 56, 86, 8, 7, 58, 168, 57, 27, 53, 3, 59, 11]
+SELECTED_FEATURE_INDICES = [1, 87, 5, 33, 0, 60, 7, 141, 168, 8, 54, 58, 114, 56, 81, 85, 57, 3, 28, 6]
 
 def extract_all_data(generator):
     """

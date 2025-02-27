@@ -1,4 +1,4 @@
-from NumericDataLoader import SEPInputDataGenerator
+from CoronalDataLoader import SEPInputDataGenerator
 import pandas as pd
 import numpy as np
 import time
@@ -14,9 +14,9 @@ import joblib
 from imblearn.over_sampling import RandomOverSampler
 from imblearn.under_sampling import RandomUnderSampler
 
-NAME = 'sep_prediction_numeric_data_pca'
+NAME = 'sep_prediction_coronal_data_pca'
 
-SELECTED_FEATURE_INDICES = [114, 1, 5, 87, 60, 33, 141, 0, 56, 86, 8, 7, 58, 168, 57, 27, 53, 3, 59, 11]
+SELECTED_FEATURE_INDICES = [5, 1, 0, 44, 7, 45, 6, 8, 72, 3, 98, 2, 99, 71, 125, 17, 152, 61, 39, 126]
 
 def extract_all_data(generator):
     """
