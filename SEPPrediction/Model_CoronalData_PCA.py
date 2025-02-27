@@ -16,7 +16,7 @@ from imblearn.under_sampling import RandomUnderSampler
 
 NAME = 'sep_prediction_coronal_data_pca'
 
-SELECTED_FEATURE_INDICES = [5, 1, 0, 44, 7, 45, 6, 8, 72, 3, 98, 2, 99, 71, 125, 17, 152, 61, 39, 126]
+SELECTED_FEATURE_INDICES = [5, 1, 0, 31, 7, 32, 6, 8, 46, 3, 59, 2, 60, 45, 73, 17, 87, 35, 26, 74]
 
 def extract_all_data(generator):
     """

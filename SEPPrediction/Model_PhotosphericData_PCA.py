@@ -16,7 +16,7 @@ from imblearn.under_sampling import RandomUnderSampler
 
 NAME = 'sep_prediction_photospheric_data_pca'
 
-SELECTED_FEATURE_INDICES = [1, 87, 5, 33, 0, 60, 7, 141, 168, 8, 54, 58, 114, 56, 81, 85, 57, 3, 28, 6]
+SELECTED_FEATURE_INDICES = [1, 57, 5, 23, 0, 40, 7, 91, 108, 8, 34, 38, 74, 36, 51, 55, 37, 3, 18, 6]
 
 def extract_all_data(generator):
     """
