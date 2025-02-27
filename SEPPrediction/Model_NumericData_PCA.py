@@ -11,29 +11,12 @@ from sklearn.ensemble import RandomForestClassifier
 import matplotlib.pyplot as plt
 import seaborn as sns
 import joblib
+from imblearn.over_sampling import RandomOverSampler
+from imblearn.under_sampling import RandomUnderSampler
 
-NAME = 'sep_prediction_numeric_data_PCA'
+NAME = 'sep_prediction_numeric_data_pca'
 
-def build_feature_names():
-    """
-    Build a list of feature names based on the SEPInputDataGenerator's column definitions.
-    This helps with interpreting PCA results later.
-    
-    Returns:
-        List of feature names
-    """
-    # One-time features
-    feature_names = list(SEPInputDataGenerator.BLOB_ONE_TIME_INFO)
-    
-    # Time-series features
-    for t in range(SEPInputDataGenerator.TIMESERIES_STEPS):
-        for col in SEPInputDataGenerator.BLOB_VECTOR_COLUMNS_GENERAL:
-            if t == 0:
-                feature_names.append(f"{col}")
-            else:
-                feature_names.append(f"{col}_t-{t*4}")
-    
-    return feature_names
+SELECTED_FEATURE_INDICES = [114, 1, 5, 87, 60, 33, 141, 0, 56, 86, 8, 7, 58, 168, 57, 27, 53, 3, 59, 11]
 
 def extract_all_data(generator):
     """
@@ -49,8 +32,6 @@ def extract_all_data(generator):
     all_X = []
     all_y = []
     for i in range(len(generator)):
-        if i % 100 == 0:
-            print(f'Batch {i+1}/{len(generator)}')
         X_batch, y_batch = generator[i]
         all_X.append(X_batch)
         all_y.append(y_batch)
@@ -59,6 +40,19 @@ def extract_all_data(generator):
         return np.vstack(all_X), np.concatenate(all_y)
     else:
         return np.array([]), np.array([])
+
+def filter_features_by_indices(X, indices):
+    """
+    Filter features by indices
+    
+    Args:
+        X: Feature matrix
+        indices: List of indices to keep
+        
+    Returns:
+        Filtered feature matrix
+    """
+    return X[:, indices]
 
 def evaluate_pca_components(X_train, y_train, X_val, y_val, components_list):
     """
@@ -91,7 +85,6 @@ def evaluate_pca_components(X_train, y_train, X_val, y_val, components_list):
         rf = RandomForestClassifier(
             n_estimators=100, 
             max_depth=15,
-            class_weight={0: 1, 1: 0.65},
             random_state=42,
             n_jobs=-1
         )
@@ -179,42 +172,6 @@ def plot_correlation_matrix(X_pca, n_components):
     plt.savefig(f'{NAME}_pca_correlation_matrix.png', dpi=300)
     plt.close()
 
-def plot_feature_loading(pca, feature_names, n_components=10):
-    """
-    Plot the feature loadings for the top PCA components
-    
-    Args:
-        pca: Fitted PCA model
-        feature_names: List of feature names
-        n_components: Number of top components to plot
-    """
-    n_components = min(n_components, pca.n_components_)
-    n_features = min(20, len(feature_names))  # Show top 20 features per component
-    
-    # Get the feature loadings
-    feature_loadings = pca.components_
-    
-    # For each principal component, find the top features
-    for i in range(n_components):
-        # Get the loadings for this component
-        loadings = feature_loadings[i]
-        # Get indices of top features by magnitude
-        top_indices = np.argsort(np.abs(loadings))[-n_features:]
-        
-        # Plot
-        plt.figure(figsize=(12, 8))
-        colors = ['red' if x < 0 else 'blue' for x in loadings[top_indices]]
-        plt.barh(
-            [feature_names[j] for j in top_indices],
-            loadings[top_indices],
-            color=colors
-        )
-        plt.title(f'Top Features for PC{i+1} (Explains {pca.explained_variance_ratio_[i]*100:.2f}% of variance)')
-        plt.xlabel('Loading')
-        plt.tight_layout()
-        plt.savefig(f'{NAME}_PC{i+1}_feature_loadings.png', dpi=300)
-        plt.close()
-
 def main():
     # Start timer
     start_time = time.time()
@@ -224,6 +181,7 @@ def main():
     blob_df = pd.read_csv(blob_df_filename)
     
     print(f"Loaded dataset with {len(blob_df)} rows")
+    print(f"Using {len(SELECTED_FEATURE_INDICES)} selected feature indices for PCA")
     
     # Preprocess the data
     blob_df['Produced an SEP'] = (blob_df['Number of SEPs Produced'] > 0) * 1
@@ -289,12 +247,29 @@ def main():
         else:
             print(f'Year {year} has insufficient data in one of the sets. Skipping.')
     
-    # Standardize the features
-    scaler = StandardScaler()
+    # Standardize basic columns in the dataframes before passing to the generator
+    # This only standardizes the columns that exist in the dataframe, not the derived time series features
     cols_to_scale = SEPInputDataGenerator.BLOB_VECTOR_COLUMNS_GENERAL + SEPInputDataGenerator.BLOB_ONE_TIME_INFO
+    scaler = StandardScaler()
     train_df[cols_to_scale] = scaler.fit_transform(train_df[cols_to_scale])
     val_df[cols_to_scale] = scaler.transform(val_df[cols_to_scale])
     test_df[cols_to_scale] = scaler.transform(test_df[cols_to_scale])
+
+    # Randomly oversample the majority class and undersample the minority class in the training set for a better balance.
+    # Use RandomOversampler w/a sampling strategy of 0.325 and then use RandomUndersampler w/a sampling strategy of 0.65.
+    # These "more optimal" ratios were determined from the other NN models from junior year research.
+    print('Before resampling:')
+    print('Train set count:', len(train_df))
+    print('Train set SEP count:', train_df['Produced an SEP'].sum())
+
+    # NOTE: ~37.5x increase in number of SEPs in train set - is quite a huge increase, consider reducing the ratio
+    ros = RandomOverSampler(sampling_strategy=0.325)
+    train_df, _ = ros.fit_resample(train_df, train_df['Produced an SEP'])
+
+    rus = RandomUnderSampler(sampling_strategy=0.65)
+    train_df, _ = rus.fit_resample(train_df, train_df['Produced an SEP'])
+
+    print('After resampling:')
     
     # Print dataset statistics
     print('\nDataset Statistics:')
@@ -318,18 +293,21 @@ def main():
     
     # Extract all data from generators
     print('\nExtracting data from generators...')
-    X_train, y_train = extract_all_data(train_generator)
-    X_val, y_val = extract_all_data(val_generator)
-    X_test, y_test = extract_all_data(test_generator)
+    X_train_full, y_train = extract_all_data(train_generator)
+    X_val_full, y_val = extract_all_data(val_generator)
+    X_test_full, y_test = extract_all_data(test_generator)
     
-    # Build feature names for interpretation
-    feature_names = build_feature_names()
+    # Extract only the selected feature indices
+    X_train = X_train_full[:, SELECTED_FEATURE_INDICES]
+    X_val = X_val_full[:, SELECTED_FEATURE_INDICES]
+    X_test = X_test_full[:, SELECTED_FEATURE_INDICES]
     
     print(f'Data extraction complete.')
+    print(f'Original feature count: {X_train_full.shape[1]}')
+    print(f'Selected feature count: {X_train.shape[1]}')
     print(f'Train data shape: {X_train.shape}, labels shape: {y_train.shape}')
     print(f'Validation data shape: {X_val.shape}, labels shape: {y_val.shape}')
     print(f'Test data shape: {X_test.shape}, labels shape: {y_test.shape}')
-    print(f'Number of features: {X_train.shape[1]}')
     
     # Check for NaN and Inf values
     print('\nChecking for NaN and Inf values:')
@@ -367,10 +345,15 @@ def main():
     
     # Alternative: Find best number of components based on explained variance (e.g., 95%)
     variance_threshold = 0.95
-    variance_components = results_df[results_df['explained_variance'] >= variance_threshold * 100].iloc[0]['n_components']
+    variance_rows = results_df[results_df['explained_variance'] >= variance_threshold * 100]
+    if not variance_rows.empty:
+        variance_components = variance_rows.iloc[0]['n_components']
+        print(f"Components needed for {variance_threshold*100}% variance: {variance_components}")
+    else:
+        variance_components = max(component_counts)
+        print(f"No component count reaches {variance_threshold*100}% variance. Using maximum: {variance_components}")
     
     print(f"\nBest number of components by AUC: {best_n_components}")
-    print(f"Components needed for {variance_threshold*100}% variance: {variance_components}")
     
     # Use the best number of components
     final_n_components = int(best_n_components)
@@ -384,9 +367,6 @@ def main():
     
     # Plot correlation matrix for PCA components
     plot_correlation_matrix(X_train_pca, min(final_n_components, 20))  # Limit to 20 for readability
-    
-    # Plot feature loadings for top components
-    plot_feature_loading(final_pca, feature_names, n_components=5)
     
     # Create DataFrames with PCA-transformed data
     pca_columns = [f'PC{i+1}' for i in range(final_n_components)]
@@ -411,8 +391,7 @@ def main():
     # Save PCA model and metadata
     joblib.dump(final_pca, f'{NAME}_pca_model.joblib')
     joblib.dump({
-        'feature_names': feature_names,
-        'scaler': scaler,
+        'selected_feature_indices': SELECTED_FEATURE_INDICES,
         'n_components': final_n_components,
         'pca_columns': pca_columns,
         'explained_variance_ratio': final_pca.explained_variance_ratio_,
@@ -456,7 +435,6 @@ def main():
         max_depth=15,
         min_samples_split=5,
         min_samples_leaf=2,
-        class_weight={0: 1, 1: 0.65},
         random_state=42,
         n_jobs=cpus_to_use
     )
