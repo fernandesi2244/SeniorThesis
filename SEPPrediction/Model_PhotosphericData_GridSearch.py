@@ -26,6 +26,10 @@ os.makedirs(RESULTS_DIR, exist_ok=True)
 random.seed(42)
 np.random.seed(42)
 
+# Multiprocessing setup
+cpus_to_use = max(int(multiprocessing.cpu_count() * 0.9), 1)
+print('Using', cpus_to_use, 'CPUs.')
+
 def build_feature_names():
     """
     Build a list of feature names based on the SEPInputDataGenerator's column definitions.
@@ -126,7 +130,6 @@ def feature_selection(X_train, y_train, feature_names):
         Indices of features sorted by importance
     """
     print('\nPerforming feature selection...')
-    cpus_to_use = max(int(multiprocessing.cpu_count() * 0.9), 1)
     
     # Initialize Random Forest for feature selection
     rf_model = RandomForestClassifier(
@@ -200,7 +203,6 @@ def evaluate_pca_component(X_train, y_train, X_val, y_val, n_features, n_compone
     explained_variance = np.sum(pca.explained_variance_ratio_) * 100
     
     # Train Random Forest on transformed data
-    cpus_to_use = max(int(multiprocessing.cpu_count() * 0.9), 1)
     rf = RandomForestClassifier(
         n_estimators=100,
         max_depth=15,
@@ -373,9 +375,9 @@ def main():
     
     # Create the data generators
     print('\nCreating data generators...')
-    train_generator = SEPInputDataGenerator(train_df, batch_size, False)
-    val_generator = SEPInputDataGenerator(val_df, batch_size, False)
-    test_generator = SEPInputDataGenerator(test_df, batch_size, False)
+    train_generator = SEPInputDataGenerator(train_df, batch_size, False, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
+    val_generator = SEPInputDataGenerator(val_df, batch_size, False, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
+    test_generator = SEPInputDataGenerator(test_df, batch_size, False, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
     
     # Extract all data from generators
     print('\nExtracting data from generators...')
