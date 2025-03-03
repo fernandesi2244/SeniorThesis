@@ -102,6 +102,7 @@ def evaluate_pca_components(X_train, y_train, X_val, y_val, components_list):
         precision = precision_score(y_val, y_pred, zero_division=0)
         recall = recall_score(y_val, y_pred)
         auc = roc_auc_score(y_val, y_pred_proba)
+        f1 = 2 * (precision * recall) / (precision + recall)
         
         # Store results
         results.append({
@@ -110,7 +111,8 @@ def evaluate_pca_components(X_train, y_train, X_val, y_val, components_list):
             'accuracy': accuracy,
             'precision': precision,
             'recall': recall,
-            'auc': auc
+            'auc': auc,
+            'f1': f1
         })
         
         print(f"Variance explained: {explained_variance:.2f}%")
@@ -132,6 +134,7 @@ def plot_pca_evaluation(results_df):
     ax1.plot(results_df['n_components'], results_df['precision'], marker='s', label='Precision')
     ax1.plot(results_df['n_components'], results_df['recall'], marker='^', label='Recall')
     ax1.plot(results_df['n_components'], results_df['auc'], marker='d', label='AUC')
+    ax1.plot(results_df['n_components'], results_df['f1'], marker='x', label='F1 Score')
     ax1.set_xlabel('Number of PCA Components')
     ax1.set_ylabel('Score')
     ax1.set_title('Model Performance vs PCA Components')
@@ -342,7 +345,7 @@ def main():
     plot_pca_evaluation(results_df)
     
     # Find the best number of components based on AUC
-    best_auc_idx = results_df['auc'].idxmax()
+    best_auc_idx = results_df['f1'].idxmax()
     best_n_components = results_df.loc[best_auc_idx, 'n_components']
     
     # Alternative: Find best number of components based on explained variance (e.g., 95%)
@@ -355,7 +358,7 @@ def main():
         variance_components = max(component_counts)
         print(f"No component count reaches {variance_threshold*100}% variance. Using maximum: {variance_components}")
     
-    print(f"\nBest number of components by AUC: {best_n_components}")
+    print(f"\nBest number of components by F1 score: {best_n_components}")
     
     # Use the best number of components
     final_n_components = int(best_n_components)
@@ -451,12 +454,14 @@ def main():
     val_precision = precision_score(y_val, y_val_pred, zero_division=0)
     val_recall = recall_score(y_val, y_val_pred)
     val_auc = roc_auc_score(y_val, y_val_pred_proba)
+    val_f1 = 2 * (val_precision * val_recall) / (val_precision + val_recall)
     
     print(f'\nValidation results with {final_n_components} PCA components:')
     print(f'Accuracy: {val_accuracy:.4f}')
     print(f'Precision: {val_precision:.4f}')
     print(f'Recall: {val_recall:.4f}')
     print(f'AUC: {val_auc:.4f}')
+    print(f'F1 Score: {val_f1:.4f}')
     
     # Evaluate on test set
     y_test_pred = rf_model.predict(X_test_pca)
@@ -466,12 +471,14 @@ def main():
     test_precision = precision_score(y_test, y_test_pred, zero_division=0)
     test_recall = recall_score(y_test, y_test_pred)
     test_auc = roc_auc_score(y_test, y_test_pred_proba)
+    test_f1 = 2 * (test_precision * test_recall) / (test_precision + test_recall)
     
     print(f'\nTest results with {final_n_components} PCA components:')
     print(f'Accuracy: {test_accuracy:.4f}')
     print(f'Precision: {test_precision:.4f}')
     print(f'Recall: {test_recall:.4f}')
     print(f'AUC: {test_auc:.4f}')
+    print(f'F1 Score: {test_f1:.4f}')
     
     # Save the RF model
     joblib.dump(rf_model, f'{NAME}_rf_model.joblib')
