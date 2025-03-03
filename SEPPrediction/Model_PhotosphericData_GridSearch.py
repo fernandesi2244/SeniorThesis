@@ -392,6 +392,7 @@ def main():
         
         # Create the data generators (right now, just being used to get timeseries data)
         print('\nCreating data generators...')
+        batch_size = 32
         train_generator = SEPInputDataGenerator(train_df, batch_size, False, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
         val_generator = SEPInputDataGenerator(val_df, batch_size, False, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
         test_generator = SEPInputDataGenerator(test_df, batch_size, False, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
@@ -411,8 +412,6 @@ def main():
 
         np.save(test_features_file, X_test)
         np.save(test_labels_file, y_test)
-
-    batch_size = 32
 
     # Build feature names for interpretation
     feature_names = build_feature_names()
