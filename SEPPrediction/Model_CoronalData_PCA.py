@@ -116,7 +116,7 @@ def evaluate_pca_components(X_train, y_train, X_val, y_val, components_list):
         })
         
         print(f"Variance explained: {explained_variance:.2f}%")
-        print(f"Validation metrics - Accuracy: {accuracy:.4f}, Precision: {precision:.4f}, Recall: {recall:.4f}, AUC: {auc:.4f}")
+        print(f"Validation metrics - Accuracy: {accuracy:.4f}, Precision: {precision:.4f}, Recall: {recall:.4f}, AUC: {auc:.4f}, F1: {f1:.4f}")
     
     return pd.DataFrame(results)
 
