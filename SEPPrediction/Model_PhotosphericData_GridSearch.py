@@ -269,122 +269,151 @@ def main():
     """Main function to run the combined feature selection and PCA analysis"""
     start_time = time.time()
     print(f"Starting combined feature selection and PCA analysis at {time.ctime()}")
-    
-    # Load dataset
-    blob_df_filename = '../OutputData/UnifiedActiveRegionData_with_all_events_including_new_flares_and_TEBBS_fix.csv'
-    blob_df = pd.read_csv(blob_df_filename)
-    
-    print(f"Loaded dataset with {len(blob_df)} rows")
-    
-    # Preprocess the data
-    blob_df['Produced an SEP'] = (blob_df['Number of SEPs Produced'] > 0) * 1  # 1 if produced, 0 otherwise
-    blob_df['Year'] = blob_df['Filename General'].apply(lambda x: x.split('.')[3][0:4])
-    blob_df['Is Plage'] = blob_df['Is Plage'].astype(int)
-    blob_df['Most Probable AR Num'] = blob_df['Relevant Active Regions'].apply(lambda x: x.strip("[]'").split(',')[0])
-    
-    # Split the data by year to maintain the same structure as in the original scripts
-    years = blob_df['Year'].unique()
-    train_df = pd.DataFrame()
-    val_df = pd.DataFrame()
-    test_df = pd.DataFrame()
-    
-    for year in years:
-        blobs_in_year = blob_df[blob_df['Year'] == year]
-        print(f'Year: {year}, Number of blobs: {len(blobs_in_year)}')
-        print(f'Number of SEPs: {blobs_in_year["Produced an SEP"].sum()}')
-    
-        # Group by active region to prevent data leakage
-        grouped = blobs_in_year.groupby('Most Probable AR Num')['Produced an SEP'].max()
-    
-        # Handle special case with only one SEP-producing active region
-        if grouped[grouped == 1].count() == 1:
-            min_train_regions = grouped[grouped == 1].index
-            remaining_train_regions, test_regions = train_test_split(
-                grouped[grouped == 0].index, test_size=0.2, random_state=42
-            )
-            train_regions = np.concatenate([min_train_regions, remaining_train_regions])
-        else:
-            train_regions, test_regions = train_test_split(
-                grouped.index, test_size=0.2, stratify=grouped, random_state=42
-            )
-    
-        # Select records based on their active region
-        train_from_year = blobs_in_year[blobs_in_year['Most Probable AR Num'].isin(train_regions)]
-        test_from_year = blobs_in_year[blobs_in_year['Most Probable AR Num'].isin(test_regions)]
-    
-        # Further split train into train and validation
-        grouped_train = train_from_year.groupby('Most Probable AR Num')['Produced an SEP'].max()
+
+    train_features_file = f'{NAME}_X_train_data.npy'
+    train_labels_file = f'{NAME}_y_train_data.npy'
+
+    val_features_file = f'{NAME}_val_data.npy'
+    val_labels_file = f'{NAME}_val_labels.npy'
+
+    test_features_file = f'{NAME}_test_data.npy'
+    test_labels_file = f'{NAME}_test_labels.npy'
+
+    if os.path.exists(test_labels_file):
+        # Load in the npy files as numpy arrays
+        X_train = np.load(train_features_file)
+        y_train = np.load(train_labels_file)
+
+        X_val = np.load(val_features_file)
+        y_val = np.load(val_labels_file)
+
+        X_test = np.load(test_features_file)
+        y_test = np.load(test_labels_file)
+    else:
+        # Load dataset
+        blob_df_filename = '../OutputData/UnifiedActiveRegionData_with_all_events_including_new_flares_and_TEBBS_fix.csv'
+        blob_df = pd.read_csv(blob_df_filename)
         
-        if grouped_train[grouped_train == 1].count() == 1:
-            min_train_regions = grouped_train[grouped_train == 1].index
-            remaining_train_regions, val_regions = train_test_split(
-                grouped_train[grouped_train == 0].index, test_size=0.25, random_state=42
-            )
-            train_regions = np.concatenate([min_train_regions, remaining_train_regions])
-        else:
-            train_regions, val_regions = train_test_split(
-                grouped_train.index, test_size=0.25, stratify=grouped_train, random_state=42
-            )
-    
-        new_train_from_year = train_from_year[train_from_year['Most Probable AR Num'].isin(train_regions)]
-        val_from_year = train_from_year[train_from_year['Most Probable AR Num'].isin(val_regions)]
-    
-        # Print statistics
-        print(f'Train set: {len(new_train_from_year)}, Val set: {len(val_from_year)}, Test set: {len(test_from_year)}')
-        print(f'Train SEPs: {new_train_from_year["Produced an SEP"].sum()}, Val SEPs: {val_from_year["Produced an SEP"].sum()}, Test SEPs: {test_from_year["Produced an SEP"].sum()}')
-    
-        if len(new_train_from_year) > 0 and len(val_from_year) > 0 and len(test_from_year) > 0:
-            train_df = pd.concat([train_df, new_train_from_year])
-            val_df = pd.concat([val_df, val_from_year])
-            test_df = pd.concat([test_df, test_from_year])
-        else:
-            print(f'Year {year} has insufficient data in one of the sets. Skipping.')
-    
-    # Standardize the features
-    scaler = StandardScaler()
-    cols_to_scale = SEPInputDataGenerator.BLOB_VECTOR_COLUMNS_GENERAL + SEPInputDataGenerator.BLOB_ONE_TIME_INFO
-    train_df[cols_to_scale] = scaler.fit_transform(train_df[cols_to_scale])
-    val_df[cols_to_scale] = scaler.transform(val_df[cols_to_scale])
-    test_df[cols_to_scale] = scaler.transform(test_df[cols_to_scale])
-    
-    # Apply class balancing to training set
-    print('\nBefore resampling:')
-    print('Train set count:', len(train_df))
-    print('Train set SEP count:', train_df['Produced an SEP'].sum())
-    
-    # Over-sample minority class
-    ros = RandomOverSampler(sampling_strategy=0.325, random_state=42)
-    train_df, _ = ros.fit_resample(train_df, train_df['Produced an SEP'])
-    
-    # Under-sample majority class
-    rus = RandomUnderSampler(sampling_strategy=0.65, random_state=42)
-    train_df, _ = rus.fit_resample(train_df, train_df['Produced an SEP'])
-    
-    print('After resampling:')
-    print('Train set count:', len(train_df))
-    print('Train set SEP count:', train_df['Produced an SEP'].sum())
-    
-    # Print dataset statistics
-    print('\nDataset Statistics:')
-    print(f'Train set size: {len(train_df)}, SEP events: {train_df["Produced an SEP"].sum()} ({train_df["Produced an SEP"].mean()*100:.2f}%)')
-    print(f'Validation set size: {len(val_df)}, SEP events: {val_df["Produced an SEP"].sum()} ({val_df["Produced an SEP"].mean()*100:.2f}%)')
-    print(f'Test set size: {len(test_df)}, SEP events: {test_df["Produced an SEP"].sum()} ({test_df["Produced an SEP"].mean()*100:.2f}%)')
-    
-    # Create data generators
+        print(f"Loaded dataset with {len(blob_df)} rows")
+        
+        # Preprocess the data
+        blob_df['Produced an SEP'] = (blob_df['Number of SEPs Produced'] > 0) * 1  # 1 if produced, 0 otherwise
+        blob_df['Year'] = blob_df['Filename General'].apply(lambda x: x.split('.')[3][0:4])
+        blob_df['Is Plage'] = blob_df['Is Plage'].astype(int)
+        blob_df['Most Probable AR Num'] = blob_df['Relevant Active Regions'].apply(lambda x: x.strip("[]'").split(',')[0])
+        
+        # Split the data by year to maintain the same structure as in the original scripts
+        years = blob_df['Year'].unique()
+        train_df = pd.DataFrame()
+        val_df = pd.DataFrame()
+        test_df = pd.DataFrame()
+        
+        for year in years:
+            blobs_in_year = blob_df[blob_df['Year'] == year]
+            print(f'Year: {year}, Number of blobs: {len(blobs_in_year)}')
+            print(f'Number of SEPs: {blobs_in_year["Produced an SEP"].sum()}')
+        
+            # Group by active region to prevent data leakage
+            grouped = blobs_in_year.groupby('Most Probable AR Num')['Produced an SEP'].max()
+        
+            # Handle special case with only one SEP-producing active region
+            if grouped[grouped == 1].count() == 1:
+                min_train_regions = grouped[grouped == 1].index
+                remaining_train_regions, test_regions = train_test_split(
+                    grouped[grouped == 0].index, test_size=0.2, random_state=42
+                )
+                train_regions = np.concatenate([min_train_regions, remaining_train_regions])
+            else:
+                train_regions, test_regions = train_test_split(
+                    grouped.index, test_size=0.2, stratify=grouped, random_state=42
+                )
+        
+            # Select records based on their active region
+            train_from_year = blobs_in_year[blobs_in_year['Most Probable AR Num'].isin(train_regions)]
+            test_from_year = blobs_in_year[blobs_in_year['Most Probable AR Num'].isin(test_regions)]
+        
+            # Further split train into train and validation
+            grouped_train = train_from_year.groupby('Most Probable AR Num')['Produced an SEP'].max()
+            
+            if grouped_train[grouped_train == 1].count() == 1:
+                min_train_regions = grouped_train[grouped_train == 1].index
+                remaining_train_regions, val_regions = train_test_split(
+                    grouped_train[grouped_train == 0].index, test_size=0.25, random_state=42
+                )
+                train_regions = np.concatenate([min_train_regions, remaining_train_regions])
+            else:
+                train_regions, val_regions = train_test_split(
+                    grouped_train.index, test_size=0.25, stratify=grouped_train, random_state=42
+                )
+        
+            new_train_from_year = train_from_year[train_from_year['Most Probable AR Num'].isin(train_regions)]
+            val_from_year = train_from_year[train_from_year['Most Probable AR Num'].isin(val_regions)]
+        
+            # Print statistics
+            print(f'Train set: {len(new_train_from_year)}, Val set: {len(val_from_year)}, Test set: {len(test_from_year)}')
+            print(f'Train SEPs: {new_train_from_year["Produced an SEP"].sum()}, Val SEPs: {val_from_year["Produced an SEP"].sum()}, Test SEPs: {test_from_year["Produced an SEP"].sum()}')
+        
+            if len(new_train_from_year) > 0 and len(val_from_year) > 0 and len(test_from_year) > 0:
+                train_df = pd.concat([train_df, new_train_from_year])
+                val_df = pd.concat([val_df, val_from_year])
+                test_df = pd.concat([test_df, test_from_year])
+            else:
+                print(f'Year {year} has insufficient data in one of the sets. Skipping.')
+        
+        # Standardize the features
+        scaler = StandardScaler()
+        cols_to_scale = SEPInputDataGenerator.BLOB_VECTOR_COLUMNS_GENERAL + SEPInputDataGenerator.BLOB_ONE_TIME_INFO
+        train_df[cols_to_scale] = scaler.fit_transform(train_df[cols_to_scale])
+        val_df[cols_to_scale] = scaler.transform(val_df[cols_to_scale])
+        test_df[cols_to_scale] = scaler.transform(test_df[cols_to_scale])
+        
+        # Apply class balancing to training set
+        print('\nBefore resampling:')
+        print('Train set count:', len(train_df))
+        print('Train set SEP count:', train_df['Produced an SEP'].sum())
+        
+        # Over-sample minority class
+        ros = RandomOverSampler(sampling_strategy=0.325, random_state=42)
+        train_df, _ = ros.fit_resample(train_df, train_df['Produced an SEP'])
+        
+        # Under-sample majority class
+        rus = RandomUnderSampler(sampling_strategy=0.65, random_state=42)
+        train_df, _ = rus.fit_resample(train_df, train_df['Produced an SEP'])
+        
+        print('After resampling:')
+        print('Train set count:', len(train_df))
+        print('Train set SEP count:', train_df['Produced an SEP'].sum())
+        
+        # Print dataset statistics
+        print('\nDataset Statistics:')
+        print(f'Train set size: {len(train_df)}, SEP events: {train_df["Produced an SEP"].sum()} ({train_df["Produced an SEP"].mean()*100:.2f}%)')
+        print(f'Validation set size: {len(val_df)}, SEP events: {val_df["Produced an SEP"].sum()} ({val_df["Produced an SEP"].mean()*100:.2f}%)')
+        print(f'Test set size: {len(test_df)}, SEP events: {test_df["Produced an SEP"].sum()} ({test_df["Produced an SEP"].mean()*100:.2f}%)')
+        
+        # Create the data generators (right now, just being used to get timeseries data)
+        print('\nCreating data generators...')
+        train_generator = SEPInputDataGenerator(train_df, batch_size, False, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
+        val_generator = SEPInputDataGenerator(val_df, batch_size, False, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
+        test_generator = SEPInputDataGenerator(test_df, batch_size, False, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
+        
+        # Extract all data from generators
+        print('\nExtracting data from generators...')
+        X_train, y_train = extract_all_data(train_generator)
+        X_val, y_val = extract_all_data(val_generator)
+        X_test, y_test = extract_all_data(test_generator)
+
+        # Save the data
+        np.save(train_features_file, X_train)
+        np.save(train_labels_file, y_train)
+
+        np.save(val_features_file, X_val)
+        np.save(val_labels_file, y_val)
+
+        np.save(test_features_file, X_test)
+        np.save(test_labels_file, y_test)
+
     batch_size = 32
-    
-    # Create the data generators
-    print('\nCreating data generators...')
-    train_generator = SEPInputDataGenerator(train_df, batch_size, False, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
-    val_generator = SEPInputDataGenerator(val_df, batch_size, False, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
-    test_generator = SEPInputDataGenerator(test_df, batch_size, False, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
-    
-    # Extract all data from generators
-    print('\nExtracting data from generators...')
-    X_train, y_train = extract_all_data(train_generator)
-    X_val, y_val = extract_all_data(val_generator)
-    X_test, y_test = extract_all_data(test_generator)
-    
+
     # Build feature names for interpretation
     feature_names = build_feature_names()
     
