@@ -1,4 +1,5 @@
 from PhotosphericDataLoader import SEPInputDataGenerator
+from ModelConstructor import ModelConstructor
 import pandas as pd
 import numpy as np
 import time
@@ -30,23 +31,46 @@ np.random.seed(42)
 cpus_to_use = max(int(multiprocessing.cpu_count() * 0.9), 1)
 print('Using', cpus_to_use, 'CPUs.')
 
-def build_feature_names():
+def build_feature_names(granularity):
     """
     Build a list of feature names based on the SEPInputDataGenerator's column definitions.
     
     Returns:
         List of feature names
     """
-    # One-time features
-    feature_names = list(SEPInputDataGenerator.BLOB_ONE_TIME_INFO)
-    
-    # Time-series features
-    for t in range(SEPInputDataGenerator.TIMESERIES_STEPS):
-        for col in SEPInputDataGenerator.BLOB_VECTOR_COLUMNS_GENERAL:
-            if t == 0:
-                feature_names.append(f"{col}")
-            else:
-                feature_names.append(f"{col}_t-{t*4}")
+    if granularity == 'per-blob':
+        # One-time features
+        feature_names = list(SEPInputDataGenerator.BLOB_ONE_TIME_INFO)
+        
+        # Time-series features
+        for t in range(SEPInputDataGenerator.TIMESERIES_STEPS):
+            for col in SEPInputDataGenerator.BLOB_VECTOR_COLUMNS_GENERAL:
+                if t == 0:
+                    feature_names.append(f"{col}")
+                else:
+                    feature_names.append(f"{col}_t-{t*4}")
+    elif granularity.startswith('per-disk'):
+        """
+        In the per-disk setting, there are all of the above features but for the top
+        5 blobs of each disk at that time. This means that the feature names will be
+        repeated for each blob, but with a suffix to indicate the blob number.
+        """
+
+        # Process one-time features and time-series features for each blob
+
+        # One-time info for disk
+        feature_names = list(SEPInputDataGenerator.BLOB_ONE_TIME_INFO)
+
+        # Time-series features for top 5 disk blobs and their previous 5 time steps
+        for i in range(1, 6):
+            for t in range(SEPInputDataGenerator.TIMESERIES_STEPS):
+                for col in SEPInputDataGenerator.BLOB_VECTOR_COLUMNS_GENERAL:
+                    if t == 0:
+                        feature_names.append(f"{col}_blob{i}")
+                    else:
+                        feature_names.append(f"{col}_t-{t*4}_blob{i}")
+    else:
+        raise ValueError(f"Invalid granularity: {granularity}")
     
     return feature_names
 
@@ -265,28 +289,37 @@ def plot_results(results_df, metric='f1'):
     plt.grid(alpha=0.3)
     plt.savefig(f'{RESULTS_DIR}/{NAME}_{metric}_by_components.png', dpi=300)
 
-def main():
-    """Main function to run the combined feature selection and PCA analysis"""
-    start_time = time.time()
-    print(f"Starting combined feature selection and PCA analysis at {time.ctime()}")
-
-    train_features_file = f'{NAME}_X_train_data.npy'
-    train_labels_file = f'{NAME}_y_train_data.npy'
-
-    val_features_file = f'{NAME}_val_data.npy'
-    val_labels_file = f'{NAME}_val_labels.npy'
-
-    test_features_file = f'{NAME}_test_data.npy'
-    test_labels_file = f'{NAME}_test_labels.npy'
-
+def load_data(granularity):
+    if granularity == 'per-blob':
+        train_features_file = f'{NAME}_X_train_data_per_blob.npy'
+        train_labels_file = f'{NAME}_y_train_data_per_blob.npy'
+        val_features_file = f'{NAME}_val_data_per_blob.npy'
+        val_labels_file = f'{NAME}_val_labels_per_blob.npy'
+        test_features_file = f'{NAME}_test_data_per_blob.npy'
+        test_labels_file = f'{NAME}_test_labels_per_blob.npy'
+    elif granularity == 'per-disk-4hr':
+        train_features_file = f'{NAME}_X_train_data_per_disk_4hr.npy'
+        train_labels_file = f'{NAME}_y_train_data_per_disk_4hr.npy'
+        val_features_file = f'{NAME}_val_data_per_disk_4hr.npy'
+        val_labels_file = f'{NAME}_val_labels_per_disk_4hr.npy'
+        test_features_file = f'{NAME}_test_data_per_disk_4hr.npy'
+        test_labels_file = f'{NAME}_test_labels_per_disk_4hr.npy'
+    elif granularity == 'per-disk-1d':
+        train_features_file = f'{NAME}_X_train_data_per_disk_1d.npy'
+        train_labels_file = f'{NAME}_y_train_data_per_disk_1d.npy'
+        val_features_file = f'{NAME}_val_data_per_disk_1d.npy'
+        val_labels_file = f'{NAME}_val_labels_per_disk_1d.npy'
+        test_features_file = f'{NAME}_test_data_per_disk_1d.npy'
+        test_labels_file = f'{NAME}_test_labels_per_disk_1d.npy'
+    else:
+        raise ValueError(f"Invalid granularity: {granularity}")
+    
     if os.path.exists(test_labels_file):
-        # Load in the npy files as numpy arrays
+        # assuming all files exist if the last-generated one does
         X_train = np.load(train_features_file)
         y_train = np.load(train_labels_file)
-
         X_val = np.load(val_features_file)
         y_val = np.load(val_labels_file)
-
         X_test = np.load(test_features_file)
         y_test = np.load(test_labels_file)
     else:
@@ -360,42 +393,12 @@ def main():
             else:
                 print(f'Year {year} has insufficient data in one of the sets. Skipping.')
         
-        # Standardize the features
-        scaler = StandardScaler()
-        cols_to_scale = SEPInputDataGenerator.BLOB_VECTOR_COLUMNS_GENERAL + SEPInputDataGenerator.BLOB_ONE_TIME_INFO
-        train_df[cols_to_scale] = scaler.fit_transform(train_df[cols_to_scale])
-        val_df[cols_to_scale] = scaler.transform(val_df[cols_to_scale])
-        test_df[cols_to_scale] = scaler.transform(test_df[cols_to_scale])
-        
-        # Apply class balancing to training set
-        print('\nBefore resampling:')
-        print('Train set count:', len(train_df))
-        print('Train set SEP count:', train_df['Produced an SEP'].sum())
-        
-        # Over-sample minority class
-        ros = RandomOverSampler(sampling_strategy=0.325, random_state=42)
-        train_df, _ = ros.fit_resample(train_df, train_df['Produced an SEP'])
-        
-        # Under-sample majority class
-        rus = RandomUnderSampler(sampling_strategy=0.65, random_state=42)
-        train_df, _ = rus.fit_resample(train_df, train_df['Produced an SEP'])
-        
-        print('After resampling:')
-        print('Train set count:', len(train_df))
-        print('Train set SEP count:', train_df['Produced an SEP'].sum())
-        
-        # Print dataset statistics
-        print('\nDataset Statistics:')
-        print(f'Train set size: {len(train_df)}, SEP events: {train_df["Produced an SEP"].sum()} ({train_df["Produced an SEP"].mean()*100:.2f}%)')
-        print(f'Validation set size: {len(val_df)}, SEP events: {val_df["Produced an SEP"].sum()} ({val_df["Produced an SEP"].mean()*100:.2f}%)')
-        print(f'Test set size: {len(test_df)}, SEP events: {test_df["Produced an SEP"].sum()} ({test_df["Produced an SEP"].mean()*100:.2f}%)')
-        
         # Create the data generators (right now, just being used to get timeseries data)
         print('\nCreating data generators...')
-        batch_size = 32
-        train_generator = SEPInputDataGenerator(train_df, batch_size, False, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
-        val_generator = SEPInputDataGenerator(val_df, batch_size, False, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
-        test_generator = SEPInputDataGenerator(test_df, batch_size, False, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
+        batch_size = 64
+        train_generator = SEPInputDataGenerator(train_df, batch_size, False, granularity, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
+        val_generator = SEPInputDataGenerator(val_df, batch_size, False, granularity, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
+        test_generator = SEPInputDataGenerator(test_df, batch_size, False, granularity, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
         
         # Extract all data from generators
         print('\nExtracting data from generators...')
@@ -413,101 +416,199 @@ def main():
         np.save(test_features_file, X_test)
         np.save(test_labels_file, y_test)
 
-    # Build feature names for interpretation
-    feature_names = build_feature_names()
+    return X_train, y_train, X_val, y_val, X_test, y_test
+
+def load_model(model_file):
+    """
+    Load a model from a file
     
-    print(f'Data extraction complete.')
-    print(f'Train data shape: {X_train.shape}, labels shape: {y_train.shape}')
-    print(f'Validation data shape: {X_val.shape}, labels shape: {y_val.shape}')
-    print(f'Test data shape: {X_test.shape}, labels shape: {y_test.shape}')
-    print(f'Number of features: {X_train.shape[1]}')
+    Args:
+        model_file: File path to the model
     
-    # Check for NaN and Inf values
-    print('\nChecking for NaN and Inf values:')
-    print(f'Train NaN count: {np.isnan(X_train).sum()}, Inf count: {np.isinf(X_train).sum()}')
-    print(f'Val NaN count: {np.isnan(X_val).sum()}, Inf count: {np.isinf(X_val).sum()}')
-    print(f'Test NaN count: {np.isnan(X_test).sum()}, Inf count: {np.isinf(X_test).sum()}')
-    
-    # Replace any NaN or Inf values with 0
-    X_train = np.nan_to_num(X_train, nan=0.0, posinf=0.0, neginf=0.0)
-    X_val = np.nan_to_num(X_val, nan=0.0, posinf=0.0, neginf=0.0)
-    X_test = np.nan_to_num(X_test, nan=0.0, posinf=0.0, neginf=0.0)
-    
-    # Run feature selection
-    feature_indices = feature_selection(X_train, y_train, feature_names)
+    Returns:
+        Model object
+    """
+    return joblib.load(model_file)
+
+def main():
+    """Main function to run the combined feature selection and PCA analysis"""
+    start_time = time.time()
+    print(f"Starting combined feature selection and PCA analysis at {time.ctime()}")
+
+    granularities = ['per-blob', 'per-disk-4hr', 'per-disk-1d']
+
+    oversampling_ratios = [0.1, 0.25, 0.5, 0.65, 0.75, 1] # pos:neg ratio
     
     # Define feature counts to test
     feature_counts = [20, 40, 60, 80, 100]
     
     # Define component counts to test for PCA
     component_counts = [2, 3, 5, 10, 15, 20, 25, 30, 40, 50]
+
+    # Model files
+    model_types = [
+        'random_forest_simple',
+        'random_forest_complex',
+        'isolation_forest',
+        'gaussian_RBF',
+        'gaussian_matern',
+        'nn_simple',
+        'nn_complex',
+        'logistic_regression_v1',
+        'logistic_regression_v2',
+        'gbm',
+        'lightgbm',
+        'xgboost',
+        'svm_rbf',
+        'svm_poly',
+        'knn_v1',
+        'knn_v2',
+        'knn_v3',
+    ]
+
+    # TODO: later, look at ensembling techniques
     
     # Create a list to store all results
     all_results = []
-    best_f1 = 0
-    best_config = None
-    best_model = None
-    best_pca = None
-    
-    # Loop through different feature counts
-    for n_features in feature_counts:
-        if n_features > len(feature_indices):
-            print(f"Warning: Requested {n_features} features, but only {len(feature_indices)} available. Using all available features.")
-            n_features = len(feature_indices)
-        
-        # Get the top n features
-        selected_indices = feature_indices[:n_features]
-        
-        # Extract data with selected features
-        X_train_selected = X_train[:, selected_indices]
-        X_val_selected = X_val[:, selected_indices]
-        X_test_selected = X_test[:, selected_indices]
-        
-        print(f"\nEvaluating top {n_features} features...")
-        
-        # Define valid component counts based on number of features
-        valid_components = [c for c in component_counts if c <= min(n_features, X_train_selected.shape[0])]
-        
-        # Loop through different PCA component counts
-        for n_components in valid_components:
+    # best_f1 = 0
+    # best_config = None
+    # best_model = None
+    # best_pca = None
+
+    for model_type in model_types:
+        print('\n' + '-'*50)
+        print(f'\nEvaluating model: {model}')
+        print('-'*50)
+
+        for granularity in granularities:
             print('\n' + '-'*50)
-            print(f'Feature Count: {n_features}, PCA Components: {n_components}')
+            print(f'\nEvaluating granularity: {granularity}')
             print('-'*50)
+            # Build feature names for interpretation
+            feature_names = build_feature_names(granularity)
+
+            # Load the data
+            X_train, y_train, X_val, y_val, X_test, y_test = load_data(granularity)
+
+            # Standardize the features
+            scaler = StandardScaler()
+            X_train = scaler.fit_transform(X_train)
+            X_val = scaler.transform(X_val)
+            X_test = scaler.transform(X_test)
+
+            for oversampling_ratio in oversampling_ratios:
+                print('\n' + '-'*50)
+                print(f'\nEvaluating oversampling ratio: {oversampling_ratio}')
+                print('-'*50)
             
-            # Evaluate this configuration
-            result = evaluate_pca_component(
-                X_train_selected, y_train, 
-                X_val_selected, y_val, 
-                n_features, n_components
-            )
-            
-            # Extract metrics to store in results list
-            result_row = {
-                'n_features': n_features,
-                'n_components': n_components,
-                'explained_variance': result['explained_variance'],
-                'accuracy': result['metrics']['accuracy'],
-                'precision': result['metrics']['precision'],
-                'recall': result['metrics']['recall'],
-                'f1': result['metrics']['f1'],
-                'auc': result['metrics']['auc']
-            }
-            
-            all_results.append(result_row)
-            
-            # Check if this is the best configuration based on F1 score
-            if result['metrics']['f1'] > best_f1:
-                best_f1 = result['metrics']['f1']
-                best_config = {
-                    'n_features': n_features,
-                    'n_components': n_components,
-                    'feature_indices': selected_indices,
-                    'metrics': result['metrics']
-                }
-                best_model = result['model']
-                best_pca = result['pca']
+                # Apply class balancing to training set
+                print('\nBefore resampling:')
+                print('Train set count:', len(X_train))
+                print('Train set SEP count:', np.sum(y_train))
                 
-                print(f"New best configuration found: {n_features} features, {n_components} PCA components, F1: {best_f1:.4f}")
+                # Over-sample minority class
+                ros = RandomOverSampler(sampling_strategy=oversampling_ratio/2, random_state=42)
+                X_train, y_train = ros.fit_resample(X_train, y_train)
+                
+                # Under-sample majority class
+                rus = RandomUnderSampler(sampling_strategy=oversampling_ratio, random_state=42)
+                X_train, y_train = rus.fit_resample(X_train, y_train)
+                
+                print('After resampling:')
+                print('Train set count:', len(X_train))
+                print('Train set SEP count:', np.sum(y_train))
+                
+                # Print dataset statistics
+                print('\nDataset Statistics:')
+                print(f'Train set size: {len(X_train)}, SEP events: {np.sum(y_train)} ({np.mean(y_train)*100:.2f}%)')
+                print(f'Validation set size: {len(X_val)}, SEP events: {np.sum(y_val)} ({np.mean(y_val)*100:.2f}%)')
+                print(f'Test set size: {len(X_test)}, SEP events: {np.sum(y_test)} ({np.mean(y_test)*100:.2f}%)')
+                print(f'Number of features: {X_train.shape[1]}')
+                
+                # Check for NaN and Inf values
+                print('\nChecking for NaN and Inf values:')
+                print(f'Train NaN count: {np.isnan(X_train).sum()}, Inf count: {np.isinf(X_train).sum()}')
+                print(f'Val NaN count: {np.isnan(X_val).sum()}, Inf count: {np.isinf(X_val).sum()}')
+                print(f'Test NaN count: {np.isnan(X_test).sum()}, Inf count: {np.isinf(X_test).sum()}')
+                
+                # Replace any NaN or Inf values with 0
+                X_train = np.nan_to_num(X_train, nan=0.0, posinf=0.0, neginf=0.0)
+                X_val = np.nan_to_num(X_val, nan=0.0, posinf=0.0, neginf=0.0)
+                X_test = np.nan_to_num(X_test, nan=0.0, posinf=0.0, neginf=0.0)
+
+                # Run feature selection
+                feature_indices = feature_selection(X_train, y_train, feature_names)
+                features = [feature_names[i] for i in feature_indices]
+                
+                # Loop through different feature counts
+                for n_features in feature_counts:
+                    if n_features > len(feature_indices):
+                        print(f"Warning: Requested {n_features} features, but only {len(feature_indices)} available. Using all available features.")
+                        n_features = len(feature_indices)
+                    
+                    # Get the top n features
+                    selected_indices = feature_indices[:n_features]
+                    
+                    # Extract data with selected features
+                    X_train_selected = X_train[:, selected_indices]
+                    X_val_selected = X_val[:, selected_indices]
+                    X_test_selected = X_test[:, selected_indices]
+                    
+                    print(f"\nEvaluating top {n_features} features...")
+                    
+                    # Define valid component counts based on number of features
+                    valid_components = [c for c in component_counts if c <= min(n_features, X_train_selected.shape[0])]
+                    
+                    # Loop through different PCA component counts
+                    for n_components in valid_components:
+                        print('\n' + '-'*50)
+                        print(f'Feature Count: {n_features}, PCA Components: {n_components}')
+                        print('-'*50)
+
+                        # time model loading
+                        model_start = time.time()
+                        model = ModelConstructor.create_model(model_type, granularity, n_components)
+                        model_end = time.time()
+                        print(f'Model loaded in {model_end - model_start:.2f} seconds')
+
+                        # Apply PCA
+                        pca = PCA(n_components=n_components, random_state=42)
+                        X_train_pca = pca.fit_transform(X_train_selected)
+                        X_val_pca = pca.transform(X_val_selected)
+                        
+                        # Calculate variance explained
+                        explained_variance = np.sum(pca.explained_variance_ratio_) * 100
+                        
+                        model.fit(X_train_pca, y_train)
+                        
+                        # Make predictions
+                        y_pred = model.predict(X_val_pca)
+                        y_pred_proba = model.predict_proba(X_val_pca)[:, 1]
+                        
+                        # Calculate metrics
+                        metrics = evaluate_model(y_val, y_pred, y_pred_proba)
+                        
+                        # Extract metrics to store in results list
+                        # TODO: Update this and later with all selected hyperparameters
+                        result_row = {
+                            'granularity': granularity,
+                            'scaler': scaler,
+                            'oversampling_ratio': oversampling_ratio,
+                            'n_features': n_features,
+                            'feature_indices': selected_indices,
+                            'feature_names': features,
+                            'n_components': n_components,
+                            'pca': pca,
+                            'model': model,
+                            'explained_variance': explained_variance,
+                            'accuracy': metrics['accuracy'],
+                            'precision': metrics['precision'],
+                            'recall': metrics['recall'],
+                            'f1': metrics['f1'],
+                            'auc': metrics['auc']
+                        }
+                        
+                        all_results.append(result_row)
     
     # Convert results to DataFrame
     results_df = pd.DataFrame(all_results)
@@ -521,10 +622,16 @@ def main():
     plot_results(results_df, 'precision')
     plot_results(results_df, 'recall')
     plot_results(results_df, 'auc')
+
+    # Get best configuration
+    best_config = results_df.loc[results_df['f1'].idxmax()].to_dict()
     
     # Print best configuration
     print("\nBest Configuration:")
+    print(f"Granularity: {best_config['granularity']}")
+    print(f"Oversampling Ratio: {best_config['oversampling_ratio']}")
     print(f"Number of Features: {best_config['n_features']}")
+    print(f"Best features: {best_config['feature_names']}")
     print(f"Number of PCA Components: {best_config['n_components']}")
     print(f"F1 Score: {best_config['metrics']['f1']:.4f}")
     print(f"Accuracy: {best_config['metrics']['accuracy']:.4f}")
@@ -533,38 +640,42 @@ def main():
     print(f"AUC: {best_config['metrics']['auc']:.4f}")
     
     # Save best feature indices
-    best_feature_names = [feature_names[i] for i in best_config['feature_indices']]
+    best_feature_names = best_config['feature_names']
     pd.DataFrame({'Feature': best_feature_names}).to_csv(f'{RESULTS_DIR}/{NAME}_best_features.csv', index=False)
     
     # Now, evaluate the best model on the test set
     print("\nEvaluating best model on test set...")
     
     # Get the best configuration's selected features
+    _, _, _, _, X_test, y_test = load_data(best_config['granularity'])
+    X_test = best_config['scaler'].transform(X_test)
     X_test_selected = X_test[:, best_config['feature_indices']]
     
     # Apply PCA transformation
-    X_test_pca = best_pca.transform(X_test_selected)
+    X_test_pca = best_config['pca'].transform(X_test_selected)
     
     # Make predictions
-    y_test_pred = best_model.predict(X_test_pca)
-    y_test_pred_proba = best_model.predict_proba(X_test_pca)[:, 1]
+    y_test_pred = best_config['model'].predict(X_test_pca)
+    y_test_pred_proba = best_config['model'].predict_proba(X_test_pca)[:, 1]
     
     # Evaluate performance
     test_metrics = evaluate_model(y_test, y_test_pred, y_test_pred_proba, "Test")
     
     # Save the best model, PCA transformer, and feature indices
     model_metadata = {
+        'granularity': best_config['granularity'],
+        'oversampling_ratio': best_config['oversampling_ratio'],
         'feature_indices': best_config['feature_indices'],
         'feature_names': best_feature_names,
         'n_components': best_config['n_components'],
         'train_metrics': best_config['metrics'],
         'test_metrics': test_metrics,
-        'scaler': scaler
     }
     
     # Save model and metadata
-    joblib.dump(best_model, f'{RESULTS_DIR}/{NAME}_best_model.joblib')
-    joblib.dump(best_pca, f'{RESULTS_DIR}/{NAME}_best_pca.joblib')
+    joblib.dump(best_config['model'], f'{RESULTS_DIR}/{NAME}_best_model.joblib')
+    joblib.dump(best_config['pca'], f'{RESULTS_DIR}/{NAME}_best_pca.joblib')
+    joblib.dump(best_config['scaler'], f'{RESULTS_DIR}/{NAME}_best_scaler.job')
     joblib.dump(model_metadata, f'{RESULTS_DIR}/{NAME}_metadata.joblib')
     
     print(f"\nBest model and metadata saved to {RESULTS_DIR}/ directory")
