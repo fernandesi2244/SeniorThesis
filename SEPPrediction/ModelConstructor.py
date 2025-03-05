@@ -39,43 +39,34 @@ class ModelConstructor(object):
         'knn_v2',
         'knn_v3',
         """
-        match model_type:
-            case 'random_forest_simple':
-                return get_rf_model(n_components, 1)
-            case 'random_forest_complex':
-                return get_rf_model(n_components, 2)
-            case 'isolation_forest':
-                return get_if_model(n_components)
-            case 'gaussian_RBF':
-                return get_gaussian_model(n_components, 'RBF')
-            case 'gaussian_matern':
-                return get_gaussian_model(n_components, 'matern')
-            case 'logistic_regression_v1':
-                return get_logistic_regression_model(n_components, 1)
-            case 'logistic_regression_v2':
-                return get_logistic_regression_model(n_components, 2)
-            case 'gbm':
-                return get_gbm_model(n_components)
-            case 'lightgbm':
-                return get_lightgbm_model(n_components)
-            case 'xgboost':
-                return get_xgboost_model(n_components)
-            case 'svm_rbf':
-                return get_svm_model(n_components, 'rbf')
-            case 'svm_poly':
-                return get_svm_model(n_components, 'poly')
-            case 'knn_v1':
-                return get_knn_model(n_components, 1)
-            case 'knn_v2':
-                return get_knn_model(n_components, 2)
-            case 'knn_v3':
-                return get_knn_model(n_components, 3)
-            case 'nn_simple':
-                return get_nn_model(granularity, n_components, 'simple')
-            case 'nn_complex':
-                return get_nn_model(granularity, n_components, 'complex')
-            case _:
-                raise ValueError('Invalid model type')
+        # Dictionary mapping model types to their corresponding functions
+        model_map = {
+            'random_forest_simple': lambda: get_rf_model(n_components, 1),
+            'random_forest_complex': lambda: get_rf_model(n_components, 2),
+            'isolation_forest': lambda: get_if_model(n_components),
+            'gaussian_RBF': lambda: get_gaussian_model(n_components, 'RBF'),
+            'gaussian_matern': lambda: get_gaussian_model(n_components, 'matern'),
+            'logistic_regression_v1': lambda: get_logistic_regression_model(n_components, 1),
+            'logistic_regression_v2': lambda: get_logistic_regression_model(n_components, 2),
+            'gbm': lambda: get_gbm_model(n_components),
+            'lightgbm': lambda: get_lightgbm_model(n_components),
+            'xgboost': lambda: get_xgboost_model(n_components),
+            'svm_rbf': lambda: get_svm_model(n_components, 'rbf'),
+            'svm_poly': lambda: get_svm_model(n_components, 'poly'),
+            'knn_v1': lambda: get_knn_model(n_components, 1),
+            'knn_v2': lambda: get_knn_model(n_components, 2),
+            'knn_v3': lambda: get_knn_model(n_components, 3),
+            'nn_simple': lambda: get_nn_model(granularity, n_components, 'simple'),
+            'nn_complex': lambda: get_nn_model(granularity, n_components, 'complex')
+        }
+        
+        # Get the model function or raise an error if model_type is invalid
+        model_func = model_map.get(model_type)
+        if model_func is None:
+            raise ValueError('Invalid model type')
+        
+        # Call the function and return the result
+        return model_func()
 
     @staticmethod
     def get_rf_model(n_components, version):
