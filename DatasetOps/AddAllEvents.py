@@ -153,8 +153,8 @@ def add_events(row):
     row['Median Emission Measure of Recent Flares'] = median_emission_measure
     row['Median Duration of Recent Flares'] = median_duration
 
-    # Get the number of flares produced, using same timing heuristic as with SEPs
-    flares_in_range = flares[(flares['endTime'].apply(toDatetime) >= record_date) & (flares['beginTime'].apply(toDatetime) <= record_date + datetime.timedelta(days=1))]
+    # Get the number of flares produced, not using the same timing heuristic as with SEPs (just straight up begin time comparison since some endTimes are null and flares are also just short when compared to 4hr-cadence blobs)
+    flares_in_range = flares[(flares['beginTime'].apply(toDatetime) >= record_date) & (flares['beginTime'].apply(toDatetime) <= record_date + datetime.timedelta(days=1))]
     flares_in_range = flares_in_range.dropna(subset=['activeRegionNum'])
     relevant_flares = flares_in_range[flares_in_range['activeRegionNum'].apply(toIntString).isin(associatedARs)]
     num_future_flares = len(relevant_flares)
@@ -183,8 +183,8 @@ def add_events(row):
     row['Number of Recent CMEs'] = num_CMEs
     row['Max Product of Half Angle and Speed of Recent CMEs'] = max_product
 
-    # Get the number of CMES produced, using same timing heuristic as with SEPs
-    CMEs_in_range = CMEs[(CMEs['endTime'].apply(toDatetime) >= record_date) & (CMEs['startTime'].apply(toDatetime) <= record_date + datetime.timedelta(days=1))]
+    # Get the number of CMES produced, not using the same timing heuristic as with SEPs (just straight up startTime comparison since no end time info available - even though CMEs can last for days)
+    CMEs_in_range = CMEs[(CMEs['startTime'].apply(toDatetime) >= record_date) & (CMEs['startTime'].apply(toDatetime) <= record_date + datetime.timedelta(days=1))]
     CMEs_in_range = CMEs_in_range.dropna(subset=['activeRegionNum'])
     relevant_CMEs = CMEs_in_range[CMEs_in_range['activeRegionNum'].apply(toIntString).isin(associatedARs)]
     num_future_CMEs = len(relevant_CMEs)
