@@ -8,6 +8,8 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import SVC
 from lightgbm import LGBMClassifier
 from xgboost import XGBClassifier
+import tensorflow as tf
+from tensorflow.keras.models import Sequential
 
 class ModelConstructor(object):
     RANDOM_STATE = 42
@@ -41,23 +43,23 @@ class ModelConstructor(object):
         """
         # Dictionary mapping model types to their corresponding functions
         model_map = {
-            'random_forest_simple': lambda: get_rf_model(n_components, 1),
-            'random_forest_complex': lambda: get_rf_model(n_components, 2),
-            'isolation_forest': lambda: get_if_model(n_components),
-            'gaussian_RBF': lambda: get_gaussian_model(n_components, 'RBF'),
-            'gaussian_matern': lambda: get_gaussian_model(n_components, 'matern'),
-            'logistic_regression_v1': lambda: get_logistic_regression_model(n_components, 1),
-            'logistic_regression_v2': lambda: get_logistic_regression_model(n_components, 2),
-            'gbm': lambda: get_gbm_model(n_components),
-            'lightgbm': lambda: get_lightgbm_model(n_components),
-            'xgboost': lambda: get_xgboost_model(n_components),
-            'svm_rbf': lambda: get_svm_model(n_components, 'rbf'),
-            'svm_poly': lambda: get_svm_model(n_components, 'poly'),
-            'knn_v1': lambda: get_knn_model(n_components, 1),
-            'knn_v2': lambda: get_knn_model(n_components, 2),
-            'knn_v3': lambda: get_knn_model(n_components, 3),
-            'nn_simple': lambda: get_nn_model(granularity, n_components, 'simple'),
-            'nn_complex': lambda: get_nn_model(granularity, n_components, 'complex')
+            'random_forest_simple': lambda: ModelConstructor.get_rf_model(n_components, 1),
+            'random_forest_complex': lambda: ModelConstructor.get_rf_model(n_components, 2),
+            'isolation_forest': lambda: ModelConstructor.get_if_model(n_components),
+            'gaussian_RBF': lambda: ModelConstructor.get_gaussian_model(n_components, 'RBF'),
+            'gaussian_matern': lambda: ModelConstructor.get_gaussian_model(n_components, 'matern'),
+            'logistic_regression_v1': lambda: ModelConstructor.get_logistic_regression_model(n_components, 1),
+            'logistic_regression_v2': lambda: ModelConstructor.get_logistic_regression_model(n_components, 2),
+            'gbm': lambda: ModelConstructor.get_gbm_model(n_components),
+            'lightgbm': lambda: ModelConstructor.get_lightgbm_model(n_components),
+            'xgboost': lambda: ModelConstructor.get_xgboost_model(n_components),
+            'svm_rbf': lambda: ModelConstructor.get_svm_model(n_components, 'rbf'),
+            'svm_poly': lambda: ModelConstructor.get_svm_model(n_components, 'poly'),
+            'knn_v1': lambda: ModelConstructor.get_knn_model(n_components, 1),
+            'knn_v2': lambda: ModelConstructor.get_knn_model(n_components, 2),
+            'knn_v3': lambda: ModelConstructor.get_knn_model(n_components, 3),
+            'nn_simple': lambda: ModelConstructor.get_nn_model(granularity, n_components, 'simple'),
+            'nn_complex': lambda: ModelConstructor.get_nn_model(granularity, n_components, 'complex')
         }
         
         # Get the model function or raise an error if model_type is invalid
@@ -106,13 +108,13 @@ class ModelConstructor(object):
 
     @staticmethod
     def get_logistic_regression_model(n_components, version):
-        if complexity == 1:
+        if version == 1:
             return LogisticRegression(
                 penalty='l2',
                 solver='liblinear',
                 random_state=ModelConstructor.RANDOM_STATE
             )
-        elif complexity == 2:
+        elif version == 2:
             return LogisticRegression(
                 penalty='elasticnet',
                 solver='saga',
