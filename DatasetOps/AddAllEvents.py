@@ -153,6 +153,13 @@ def add_events(row):
     row['Median Emission Measure of Recent Flares'] = median_emission_measure
     row['Median Duration of Recent Flares'] = median_duration
 
+    # Get the number of flares produced, using same timing heuristic as with SEPs
+    flares_in_range = flares[(flares['endTime'].apply(toDatetime) >= record_date) & (flares['beginTime'].apply(toDatetime) <= record_date + datetime.timedelta(days=1))]
+    flares_in_range = flares_in_range.dropna(subset=['activeRegionNum'])
+    relevant_flares = flares_in_range[flares_in_range['activeRegionNum'].apply(toIntString).isin(associatedARs)]
+    num_future_flares = len(relevant_flares)
+    row['Number of Flares Produced'] = num_future_flares
+
     # Do the same for CMEs
     CMEs_3_days_before = CMEs[(CMEs['startTime'].apply(toDatetime) >= reference_datetime - datetime.timedelta(days=3)) & (CMEs['startTime'].apply(toDatetime) < reference_datetime)]
     CMEs_3_days_before = CMEs_3_days_before.dropna(subset=['activeRegionNum'])
@@ -176,6 +183,13 @@ def add_events(row):
     row['Number of Recent CMEs'] = num_CMEs
     row['Max Product of Half Angle and Speed of Recent CMEs'] = max_product
 
+    # Get the number of CMES produced, using same timing heuristic as with SEPs
+    CMEs_in_range = CMEs[(CMEs['endTime'].apply(toDatetime) >= record_date) & (CMEs['startTime'].apply(toDatetime) <= record_date + datetime.timedelta(days=1))]
+    CMEs_in_range = CMEs_in_range.dropna(subset=['activeRegionNum'])
+    relevant_CMEs = CMEs_in_range[CMEs_in_range['activeRegionNum'].apply(toIntString).isin(associatedARs)]
+    num_future_CMEs = len(relevant_CMEs)
+    row['Number of CMEs Produced'] = num_future_CMEs
+
     return row
 
 def toDatetime(date):
@@ -198,4 +212,4 @@ def toIntString(floatNum):
 
 rowNum = 0
 unified_data = unified_data.apply(add_events, axis=1)
-unified_data.to_csv('../OutputData/UnifiedActiveRegionData_with_all_events_including_new_flares_and_TEBBS_fix.csv', index=False)
+unified_data.to_csv('../OutputData/UnifiedActiveRegionData_with_all_events_including_new_flares_and_TEBBS_fix_and_flare_cme_labels.csv', index=False)
