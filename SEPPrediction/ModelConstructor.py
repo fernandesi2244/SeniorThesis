@@ -86,7 +86,7 @@ class ModelConstructor(object):
         return IsolationForest(
             n_estimators=100,
             contamination='auto',
-            max_features=n_components * 0.3,
+            max_features=0.5,
             random_state=ModelConstructor.RANDOM_STATE
         )
     
