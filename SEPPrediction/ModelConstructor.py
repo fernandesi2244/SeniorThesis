@@ -17,7 +17,7 @@ class ModelConstructor(object):
     # in some sense because we can perform convolution just on certain
     # parts of the input, for example.
     @classmethod
-    def create_model(model_type, granularity, n_components):
+    def create_model(cls, model_type, granularity, n_components):
         """
         Possible model types:
 
