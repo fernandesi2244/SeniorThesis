@@ -567,7 +567,11 @@ def main():
 
                         # time model loading
                         model_start = time.time()
-                        model = ModelConstructor.create_model(model_type, granularity, n_components)
+                        if model_type == 'isolation_forest':
+                            percent_pos = np.sum(y_train) / len(y_train)
+                            model = ModelConstructor.create_model(model_type, granularity, n_components, contamination=percent_pos)
+                        else:
+                            model = ModelConstructor.create_model(model_type, granularity, n_components)
                         model_end = time.time()
                         print(f'Model loaded in {model_end - model_start:.2f} seconds')
 
@@ -582,7 +586,14 @@ def main():
                         model.fit(X_train_pca, y_train)
                         
                         # Make predictions
-                        y_pred = model.predict(X_val_pca)
+                        if model_type == 'isolation_forest':
+                            # y_pred is 1 for inliers, -1 for outliers, but we want
+                            # 1 for outliers and 0 for inliers
+                            y_pred = model.predict(X_val_pca)
+                            y_pred[y_pred == 1] = 0
+                            y_pred[y_pred == -1] = 1
+                        else:
+                            y_pred = model.predict(X_val_pca)
 
                         if model_type == 'isolation_forest':
                             anomaly_scores = model.decision_function(X_val_pca)

@@ -19,7 +19,7 @@ class ModelConstructor(object):
     # in some sense because we can perform convolution just on certain
     # parts of the input, for example.
     @classmethod
-    def create_model(cls, model_type, granularity, n_components):
+    def create_model(cls, model_type, granularity, n_components, **kwargs):
         """
         Possible model types:
 
@@ -45,7 +45,7 @@ class ModelConstructor(object):
         model_map = {
             'random_forest_simple': lambda: ModelConstructor.get_rf_model(n_components, 1),
             'random_forest_complex': lambda: ModelConstructor.get_rf_model(n_components, 2),
-            'isolation_forest': lambda: ModelConstructor.get_if_model(n_components),
+            'isolation_forest': lambda: ModelConstructor.get_if_model(n_components, kwargs.get('contamination')),
             'gaussian_RBF': lambda: ModelConstructor.get_gaussian_model(n_components, 'RBF'),
             'gaussian_matern': lambda: ModelConstructor.get_gaussian_model(n_components, 'matern'),
             'logistic_regression_v1': lambda: ModelConstructor.get_logistic_regression_model(n_components, 1),
@@ -82,10 +82,10 @@ class ModelConstructor(object):
         )
 
     @staticmethod
-    def get_if_model(n_components):
+    def get_if_model(n_components, contamination):
         return IsolationForest(
             n_estimators=100,
-            contamination='auto',
+            contamination=contamination,
             max_features=0.5,
             random_state=ModelConstructor.RANDOM_STATE
         )
