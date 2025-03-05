@@ -477,7 +477,7 @@ def main():
 
     for model_type in model_types:
         print('\n' + '-'*50)
-        print(f'\nEvaluating model: {model}')
+        print(f'\nEvaluating model: {model_type}')
         print('-'*50)
 
         for granularity in granularities:
