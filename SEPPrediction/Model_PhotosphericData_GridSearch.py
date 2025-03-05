@@ -583,7 +583,12 @@ def main():
                         
                         # Make predictions
                         y_pred = model.predict(X_val_pca)
-                        y_pred_proba = model.predict_proba(X_val_pca)[:, 1]
+
+                        if model_type == 'isolation_forest':
+                            anomaly_scores = model.decision_function(X_val_pca)
+                            y_pred_proba = (anomaly_scores - np.min(anomaly_scores)) / (np.max(anomaly_scores) - np.min(anomaly_scores))
+                        else:
+                            y_pred_proba = model.predict_proba(X_val_pca)[:, 1]
                         
                         # Calculate metrics
                         metrics = evaluate_model(y_val, y_pred, y_pred_proba)
