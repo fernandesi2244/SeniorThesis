@@ -626,6 +626,10 @@ def main():
                         }
                         
                         all_results.append(result_row)
+
+                        # Save current state of all_results
+                        results_df = pd.DataFrame(all_results)
+                        results_df.to_csv(f'{RESULTS_DIR}/{NAME}_all_results_so_far.csv', index=False)
     
     # Convert results to DataFrame
     results_df = pd.DataFrame(all_results)
