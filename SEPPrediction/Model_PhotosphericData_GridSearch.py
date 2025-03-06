@@ -511,6 +511,11 @@ def main():
                 print('\nBefore resampling:')
                 print('Train set count:', len(X_train))
                 print('Train set SEP count:', np.sum(y_train))
+
+                # if oversampling ratio is less than or equal to the current ratio, skip
+                if oversampling_ratio <= np.sum(y_train) / len(y_train):
+                    print(f"Skipping oversampling ratio {oversampling_ratio} as positive class already significant enough.")
+                    continue
                 
                 # Over-sample minority class
                 ros = RandomOverSampler(sampling_strategy=oversampling_ratio/2, random_state=42)
