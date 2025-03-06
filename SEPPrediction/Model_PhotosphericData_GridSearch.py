@@ -450,8 +450,8 @@ def main():
         'random_forest_simple',
         'random_forest_complex',
         'isolation_forest',
-        'gaussian_RBF',
-        'gaussian_matern',
+        #'gaussian_RBF',
+        #'gaussian_matern',
         'nn_simple',
         'nn_complex',
         'logistic_regression_v1',
@@ -565,11 +565,7 @@ def main():
                         print(f'Feature Count: {n_features}, PCA Components: {n_components}')
                         print('-'*50)
 
-                        # time model loading
-                        model_start = time.time()
                         model = ModelConstructor.create_model(model_type, granularity, n_components)
-                        model_end = time.time()
-                        print(f'Model loaded in {model_end - model_start:.2f} seconds')
 
                         # Apply PCA
                         pca = PCA(n_components=n_components, random_state=42)
@@ -579,14 +575,18 @@ def main():
                         # Calculate variance explained
                         explained_variance = np.sum(pca.explained_variance_ratio_) * 100
                         
+                        # time model training
+                        train_start = time.time()
                         model.fit(X_train_pca, y_train)
+                        train_end = time.time()
+                        print(f'Model trained in {train_end - train_start:.2f} seconds')
                         
                         # Make predictions
                         y_pred = model.predict(X_val_pca)
                         y_pred_proba = model.predict_proba(X_val_pca)[:, 1]
                         
                         # Calculate metrics
-                        metrics = evaluate_model(y_val, y_pred, y_pred_proba)
+                        metrics = evaluate_model(y_val, y_pred, y_pred_proba, "Validation")
                         
                         # Extract metrics to store in results list
                         # TODO: Update this and later with all selected hyperparameters
