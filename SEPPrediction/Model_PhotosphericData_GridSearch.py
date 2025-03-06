@@ -565,7 +565,12 @@ def main():
                         print(f'Feature Count: {n_features}, PCA Components: {n_components}')
                         print('-'*50)
 
-                        model = ModelConstructor.create_model(model_type, granularity, n_components)
+                        # time model loading
+                        if model_type == 'isolation_forest':
+                            percent_pos = np.sum(y_train) / len(y_train)
+                            model = ModelConstructor.create_model(model_type, granularity, n_components, contamination=percent_pos)
+                        else:
+                            model = ModelConstructor.create_model(model_type, granularity, n_components)
 
                         # Apply PCA
                         pca = PCA(n_components=n_components, random_state=42)
@@ -582,8 +587,20 @@ def main():
                         print(f'Model trained in {train_end - train_start:.2f} seconds')
                         
                         # Make predictions
-                        y_pred = model.predict(X_val_pca)
-                        y_pred_proba = model.predict_proba(X_val_pca)[:, 1]
+                        if model_type == 'isolation_forest':
+                            # y_pred is 1 for inliers, -1 for outliers, but we want
+                            # 1 for outliers and 0 for inliers
+                            y_pred = model.predict(X_val_pca)
+                            y_pred[y_pred == 1] = 0
+                            y_pred[y_pred == -1] = 1
+                        else:
+                            y_pred = model.predict(X_val_pca)
+
+                        if model_type == 'isolation_forest':
+                            anomaly_scores = model.decision_function(X_val_pca)
+                            y_pred_proba = (anomaly_scores - np.min(anomaly_scores)) / (np.max(anomaly_scores) - np.min(anomaly_scores))
+                        else:
+                            y_pred_proba = model.predict_proba(X_val_pca)[:, 1]
                         
                         # Calculate metrics
                         metrics = evaluate_model(y_val, y_pred, y_pred_proba, "Validation")
