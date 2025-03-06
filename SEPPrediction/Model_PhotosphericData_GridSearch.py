@@ -443,7 +443,7 @@ def main():
 
     granularities = ['per-blob', 'per-disk-4hr', 'per-disk-1d'] # ['per-blob', 'per-disk-4hr', 'per-disk-1d']
 
-    oversampling_ratios = [0.25, 0.65, 0.75] # [0.1, 0.25, 0.5, 0.65, 0.75, 1] # pos:neg ratio
+    oversampling_ratios = [0.25, 0.65] # [0.1, 0.25, 0.5, 0.65, 0.75, 1] # pos:neg ratio. TODO: figure out some other day why > 0.65 isn't working
     
     # Define feature counts to test
     feature_counts = [20, 40, 60, 80] #[20, 40, 60, 80, 100]
