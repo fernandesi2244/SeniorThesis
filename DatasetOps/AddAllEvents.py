@@ -17,9 +17,16 @@ unified_data = pd.read_csv('../OutputData/UnifiedActiveRegionData_5_15_150_100.c
 unified_data['datetime'] = unified_data['Filename General'].apply(lambda x: x.split('.')[3])
 
 # Load SEP (CSV), flare (JSON) and CME (JSON) data
-SEPs = pd.read_csv('../InputData/SPEs.csv')
+SEPs = pd.read_csv('../InputData/SPEs_with_types.csv')
 flares = pd.read_json('../InputData/Flares.json')
 CMEs = pd.read_json('../InputData/CMEs.json')
+
+# Ignore any SEPs rows that don't have an 'endTime'
+len_before_drop = len(SEPs)
+SEPs = SEPs.dropna(subset=['endTime'])
+len_after_drop = len(SEPs)
+print('Dropped', len_before_drop - len_after_drop, 'rows from SEPs due to missing end times.')
+print('New length of SEPs:', len(SEPs))
 
 # TODO: Load TEBBS data here, also push above JSONs to GitHub.
 """
@@ -61,11 +68,24 @@ def add_events(row):
     # Fetch date from 'datetime' column in this format: 20160416_000000_TAI
     record_date = datetime.datetime.strptime(row['datetime'], '%Y%m%d_%H%M%S_TAI')
     # TODO: Revisit this heuristic
-    SEPs_in_range = SEPs[(SEPs['endTime'].apply(toDatetime) >= record_date) & (SEPs['beginTime'].apply(toDatetime) <= record_date + datetime.timedelta(days=1))]
-    relevant_SEPs = SEPs_in_range[SEPs_in_range['activeRegionNum'].apply(toIntString).isin(associatedARs)]
+    SEPs_in_range = SEPs[
+        (SEPs['endTime'].apply(toDatetime) >= record_date) &
+        (SEPs['beginTime'].apply(toDatetime) <= record_date + datetime.timedelta(days=1))
+    ]
+    relevant_SEPs = SEPs_in_range[
+        (SEPs_in_range['activeRegionNum'].apply(toIntString).isin(associatedARs)) &
+        (SEPs_in_range['P10OnsetMax'] >= 10)
+    ]
     # TODO: No other way we can do these associations, right? We have blob lats/lons in case they are useful.
     num_SEPs = len(relevant_SEPs)
-    row['Number of SEPs Produced'] = num_SEPs # TODO: Should this match with M&X event rate?
+    row['Number of SEPs Produced'] = num_SEPs
+
+    subthreshold_SEPs_in_range = SEPs_in_range[SEPs_in_range['P10OnsetMax'] < 10]
+    relevant_subthreshold_SEPs = subthreshold_SEPs_in_range[
+        subthreshold_SEPs_in_range['activeRegionNum'].apply(toIntString).isin(associatedARs)
+    ]
+    num_subthreshold_SEPs = len(relevant_subthreshold_SEPs)
+    row['Number of Subthreshold SEPs Produced'] = num_subthreshold_SEPs
 
     if isTest:
         print('For test SEP:')
@@ -86,6 +106,26 @@ def add_events(row):
         # to be true.
     else:
         reference_datetime = record_date
+
+    # Now find number of recent >=10 MeV SEPs in the past 6 days
+    past_SEPs_in_range = SEPs[
+        (SEPs['beginTime'].apply(toDatetime) >= reference_datetime - datetime.timedelta(days=6)) &
+        (SEPs['beginTime'].apply(toDatetime) < reference_datetime)
+    ]
+    relevant_past_SEPs = past_SEPs_in_range[
+        (past_SEPs_in_range['activeRegionNum'].apply(toIntString).isin(associatedARs)) &
+        (past_SEPs_in_range['P10OnsetMax'] >= 10)
+    ]
+    num_past_SEPs = len(relevant_past_SEPs)
+    row['Number of Recent SEPs'] = num_past_SEPs
+
+    # Now find the number of recent subthreshold SEPs in the past 6 days
+    relevant_past_subthreshold_SEPs = past_SEPs_in_range[
+        (past_SEPs_in_range['activeRegionNum'].apply(toIntString).isin(associatedARs)) &
+        (past_SEPs_in_range['P10OnsetMax'] < 10)
+    ]
+    num_past_subthreshold_SEPs = len(relevant_past_subthreshold_SEPs)
+    row['Number of Recent Subthreshold SEPs'] = num_past_subthreshold_SEPs
 
     # Get the flares that occurred within 3 days before of the reference date
     # TODO: Play around with a longer look-ahead window since the look-behind window is already 3 days.
@@ -168,9 +208,20 @@ def add_events(row):
 
     # Get the maximum product of the halfAngle and speed of the relevant CMEs
     try:
-        # TODO: Make sure this is working for cases where there are more than 1 relevant CME
-        halfAngles = [relevant_CMEs.iloc[i]['cmeAnalyses'][0]['halfAngle'] for i in range(len(relevant_CMEs))]
-        speeds = [relevant_CMEs.iloc[i]['cmeAnalyses'][0]['speed'] for i in range(len(relevant_CMEs))]
+        # Ignore relevant CMEs that don't have a 'cmeAnalyses' field or don't have
+        # a 'halfAngle' or 'speed' field in their 'cmeAnalyses' field.
+
+        halfAngles = []
+        speeds = []
+        
+        for i in range(len(relevant_CMEs)):
+            cme = relevant_CMEs.iloc[i]
+            if 'cmeAnalyses' in cme and len(cme['cmeAnalyses']) > 0:
+                analysis = cme['cmeAnalyses'][0]
+                if 'halfAngle' in analysis and 'speed' in analysis:
+                    halfAngles.append(analysis['halfAngle'])
+                    speeds.append(analysis['speed'])
+
         max_product = 0
         for i in range(len(halfAngles)):
             product = halfAngles[i] * speeds[i]
