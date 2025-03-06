@@ -438,15 +438,15 @@ def main():
     start_time = time.time()
     print(f"Starting combined feature selection and PCA analysis at {time.ctime()}")
 
-    granularities = ['per-blob'] # ['per-blob', 'per-disk-4hr', 'per-disk-1d']
+    granularities = ['per-blob', 'per-disk-1d'] # ['per-blob', 'per-disk-4hr', 'per-disk-1d']
 
     oversampling_ratios = [0.65] # [0.1, 0.25, 0.5, 0.65, 0.75, 1] # pos:neg ratio
     
     # Define feature counts to test
-    feature_counts = [40] #[20, 40, 60, 80, 100]
+    feature_counts = [20, 40] #[20, 40, 60, 80, 100]
     
     # Define component counts to test for PCA
-    component_counts = [10] #[2, 3, 5, 10, 15, 20, 25, 30, 40, 50]
+    component_counts = [10, 20] #[2, 3, 5, 10, 15, 20, 25, 30, 40, 50]
 
     # Model files
     model_types = [
@@ -625,6 +625,7 @@ def main():
                             'feature_names': features,
                             'n_components': n_components,
                             'pca': pca,
+                            'model_type': model_type,
                             'model': model,
                             'explained_variance': explained_variance,
                             'accuracy': metrics['accuracy'],
@@ -658,16 +659,17 @@ def main():
     
     # Print best configuration
     print("\nBest Configuration:")
+    print(f"Model type: {best_config['model_type']}")
     print(f"Granularity: {best_config['granularity']}")
     print(f"Oversampling Ratio: {best_config['oversampling_ratio']}")
     print(f"Number of Features: {best_config['n_features']}")
     print(f"Best features: {best_config['feature_names']}")
     print(f"Number of PCA Components: {best_config['n_components']}")
-    print(f"F1 Score: {best_config['metrics']['f1']:.4f}")
-    print(f"Accuracy: {best_config['metrics']['accuracy']:.4f}")
-    print(f"Precision: {best_config['metrics']['precision']:.4f}")
-    print(f"Recall: {best_config['metrics']['recall']:.4f}")
-    print(f"AUC: {best_config['metrics']['auc']:.4f}")
+    print(f"F1 Score: {best_config['f1']:.4f}")
+    print(f"Accuracy: {best_config['accuracy']:.4f}")
+    print(f"Precision: {best_config['precision']:.4f}")
+    print(f"Recall: {best_config['recall']:.4f}")
+    print(f"AUC: {best_config['auc']:.4f}")
     
     # Save best feature indices
     best_feature_names = best_config['feature_names']
@@ -693,12 +695,19 @@ def main():
     
     # Save the best model, PCA transformer, and feature indices
     model_metadata = {
+        'model_type': best_config['model_type'],
         'granularity': best_config['granularity'],
         'oversampling_ratio': best_config['oversampling_ratio'],
         'feature_indices': best_config['feature_indices'],
         'feature_names': best_feature_names,
         'n_components': best_config['n_components'],
-        'train_metrics': best_config['metrics'],
+        'train_metrics': {
+            'accuracy': best_config['accuracy'],
+            'precision': best_config['precision'],
+            'recall': best_config['recall'],
+            'f1': best_config['f1'],
+            'auc': best_config['auc']
+        },
         'test_metrics': test_metrics,
     }
     
