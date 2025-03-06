@@ -196,6 +196,7 @@ def feature_selection(X_train, y_train, feature_names):
     plt.title(f'Top {top_n} Features by Importance')
     plt.tight_layout()
     plt.savefig(f'{RESULTS_DIR}/{NAME}_top_{top_n}_features.png', dpi=300)
+    plt.close()
     
     # Save feature importance
     feature_importance_df.to_csv(f'{RESULTS_DIR}/{NAME}_feature_importance.csv', index=False)
@@ -275,6 +276,7 @@ def plot_results(results_df, metric='f1'):
     plt.xlabel('Number of Features')
     plt.ylabel('Number of PCA Components')
     plt.savefig(f'{RESULTS_DIR}/{NAME}_{metric}_heatmap.png', dpi=300)
+    plt.close()
     
     # For each feature count, plot metrics vs number of components
     plt.figure(figsize=(15, 10))
@@ -291,6 +293,7 @@ def plot_results(results_df, metric='f1'):
     plt.legend()
     plt.grid(alpha=0.3)
     plt.savefig(f'{RESULTS_DIR}/{NAME}_{metric}_by_components.png', dpi=300)
+    plt.close()
 
 def load_data(granularity):
     if granularity == 'per-blob':
@@ -438,15 +441,15 @@ def main():
     start_time = time.time()
     print(f"Starting combined feature selection and PCA analysis at {time.ctime()}")
 
-    granularities = ['per-blob', 'per-disk-1d'] # ['per-blob', 'per-disk-4hr', 'per-disk-1d']
+    granularities = ['per-blob', 'per-disk-4hr', 'per-disk-1d'] # ['per-blob', 'per-disk-4hr', 'per-disk-1d']
 
-    oversampling_ratios = [0.65] # [0.1, 0.25, 0.5, 0.65, 0.75, 1] # pos:neg ratio
+    oversampling_ratios = [0.25, 0.65, 1] # [0.1, 0.25, 0.5, 0.65, 0.75, 1] # pos:neg ratio
     
     # Define feature counts to test
-    feature_counts = [20, 40] #[20, 40, 60, 80, 100]
+    feature_counts = [20, 40, 60, 80] #[20, 40, 60, 80, 100]
     
     # Define component counts to test for PCA
-    component_counts = [10, 20] #[2, 3, 5, 10, 15, 20, 25, 30, 40, 50]
+    component_counts = [5, 10, 20, 40] #[2, 3, 5, 10, 15, 20, 25, 30, 40, 50]
 
     # Model files
     model_types = [
