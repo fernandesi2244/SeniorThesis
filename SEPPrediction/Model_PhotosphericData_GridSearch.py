@@ -263,8 +263,10 @@ def plot_results(results_df, metric='f1'):
         results_df: DataFrame with results
         metric: Metric to plot (default: f1)
     """
+    pivot_data = results_df.groupby(['n_components', 'n_features'])[metric].mean().reset_index()
+    
     # Create pivot table for heatmap
-    pivot_df = results_df.pivot(index='n_components', columns='n_features', values=metric)
+    pivot_df = pivot_data.pivot(index='n_components', columns='n_features', values=metric)
     
     # Plot heatmap
     plt.figure(figsize=(12, 10))
@@ -279,7 +281,8 @@ def plot_results(results_df, metric='f1'):
     feature_counts = results_df['n_features'].unique()
     
     for feat_count in feature_counts:
-        subset = results_df[results_df['n_features'] == feat_count]
+        # Use the grouped data to plot the lines
+        subset = pivot_data[pivot_data['n_features'] == feat_count]
         plt.plot(subset['n_components'], subset[metric], marker='o', label=f'{feat_count} features')
     
     plt.title(f'{metric.upper()} Score vs PCA Components')
