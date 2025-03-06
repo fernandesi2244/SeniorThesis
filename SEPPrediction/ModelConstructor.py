@@ -158,6 +158,7 @@ class ModelConstructor(object):
             return SVC(
                 kernel='rbf',
                 gamma='scale',
+                probability=True,
                 random_state=ModelConstructor.RANDOM_STATE
             )
         elif kernel == 'poly':
@@ -165,6 +166,7 @@ class ModelConstructor(object):
                 kernel='poly',
                 degree=3,
                 gamma='scale',
+                probability=True,
                 random_state=ModelConstructor.RANDOM_STATE
             )
         else:
