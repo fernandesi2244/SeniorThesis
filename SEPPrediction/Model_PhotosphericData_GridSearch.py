@@ -593,12 +593,18 @@ def main():
                             y_pred = model.predict(X_val_pca)
                             y_pred[y_pred == 1] = 0
                             y_pred[y_pred == -1] = 1
+                        elif model_type == 'nn_simple' or model_type == 'nn_complex':
+                            y_pred_proba = model.predict(X_val_pca)
+                            # Assume 0.5 threshold for now, prob need to optimize over too
+                            y_pred = (y_pred_proba > 0.5).astype(int)
                         else:
                             y_pred = model.predict(X_val_pca)
 
                         if model_type == 'isolation_forest':
                             anomaly_scores = model.decision_function(X_val_pca)
                             y_pred_proba = (anomaly_scores - np.min(anomaly_scores)) / (np.max(anomaly_scores) - np.min(anomaly_scores))
+                        elif model_type == 'nn_simple' or model_type == 'nn_complex':
+                            pass # already calculated
                         else:
                             y_pred_proba = model.predict_proba(X_val_pca)[:, 1]
                         
