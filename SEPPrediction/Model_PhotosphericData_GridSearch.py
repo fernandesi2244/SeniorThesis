@@ -441,7 +441,7 @@ def main():
     start_time = time.time()
     print(f"Starting combined feature selection and PCA analysis at {time.ctime()}")
 
-    granularities = ['per-blob', 'per-disk-4hr', 'per-disk-1d'] # ['per-blob', 'per-disk-4hr', 'per-disk-1d']
+    granularities = ['per-blob'] # ['per-blob', 'per-disk-4hr', 'per-disk-1d']
 
     oversampling_ratios = [0.25, 0.65] # [0.1, 0.25, 0.5, 0.65, 0.75, 1] # pos:neg ratio. TODO: figure out some other day why > 0.65 isn't working
     
