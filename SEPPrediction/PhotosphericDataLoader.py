@@ -247,8 +247,8 @@ class SEPInputDataGenerator(tf.keras.utils.Sequence):
                     overall_blob_data.extend(blob_timeseries_vector)
                 
                 # If there were less than 5 blobs, fill in the rest with 0s
-                while len(overall_blob_data) < 6 * len(SEPInputDataGenerator.BLOB_VECTOR_COLUMNS_GENERAL):
-                    overall_blob_data.extend(np.zeros(len(SEPInputDataGenerator.BLOB_VECTOR_COLUMNS_GENERAL)))
+                while len(overall_blob_data) < 5 * SEPInputDataGenerator.TIMESERIES_STEPS * len(SEPInputDataGenerator.BLOB_VECTOR_COLUMNS_GENERAL):
+                    overall_blob_data.extend(np.zeros(SEPInputDataGenerator.TIMESERIES_STEPS * len(SEPInputDataGenerator.BLOB_VECTOR_COLUMNS_GENERAL))) # add blob at a time
                 
                 complete_data_vector = full_disk_one_time_info + overall_blob_data
                 complete_data_vector = np.array(complete_data_vector)
