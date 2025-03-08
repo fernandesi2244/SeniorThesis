@@ -444,7 +444,7 @@ def main():
 
     granularities = ['per-blob'] # ['per-blob', 'per-disk-4hr', 'per-disk-1d']
 
-    oversampling_ratios = [0.1, 0.25, 0.65, 0.75] # [0.1, 0.25, 0.5, 0.65, 0.75, 1] # pos:neg ratio. TODO: figure out some other day why > 0.65 isn't working
+    oversampling_ratios = [0.1, 0.25, 0.65, 0.75, 1] # [0.1, 0.25, 0.5, 0.65, 0.75, 1] # pos:neg ratio. TODO: figure out some other day why > 0.65 isn't working
     
     # Define feature counts to test
     feature_counts = [20, 40, 60, 80] #[20, 40, 60, 80, 100]
@@ -495,11 +495,22 @@ def main():
             feature_names = build_feature_names(granularity)
 
             # Load the data
-            X_train, y_train, X_val, y_val, X_test, y_test = load_data(granularity)
+            X_train_OG, y_train, X_val, y_val, X_test, y_test = load_data(granularity)
+
+            # Check for NaN and Inf values
+            print('\nChecking for NaN and Inf values:')
+            print(f'Train NaN count: {np.isnan(X_train_OG).sum()}, Inf count: {np.isinf(X_train_OG).sum()}')
+            print(f'Val NaN count: {np.isnan(X_val).sum()}, Inf count: {np.isinf(X_val).sum()}')
+            print(f'Test NaN count: {np.isnan(X_test).sum()}, Inf count: {np.isinf(X_test).sum()}')
+            
+            # Replace any NaN or Inf values with 0. NOTE: This code should never change the data since there are no NaNs.
+            X_train_OG = np.nan_to_num(X_train_OG, nan=0.0, posinf=0.0, neginf=0.0)
+            X_val = np.nan_to_num(X_val, nan=0.0, posinf=0.0, neginf=0.0)
+            X_test = np.nan_to_num(X_test, nan=0.0, posinf=0.0, neginf=0.0)
 
             # Standardize the features
             scaler = StandardScaler()
-            X_train = scaler.fit_transform(X_train)
+            X_train_OG = scaler.fit_transform(X_train_OG)
             X_val = scaler.transform(X_val)
             X_test = scaler.transform(X_test)
 
@@ -510,7 +521,7 @@ def main():
             
                 # Apply class balancing to training set
                 print('\nBefore resampling:')
-                print('Train set count:', len(X_train))
+                print('Train set count:', len(X_train_OG))
                 print('Train set SEP count:', np.sum(y_train))
 
                 # if oversampling ratio is less than or equal to the current ratio, skip
@@ -520,7 +531,7 @@ def main():
                 
                 # Over-sample minority class
                 ros = RandomOverSampler(sampling_strategy=oversampling_ratio/2, random_state=42)
-                X_train, y_train = ros.fit_resample(X_train, y_train)
+                X_train, y_train = ros.fit_resample(X_train_OG, y_train)
                 
                 # Under-sample majority class
                 rus = RandomUnderSampler(sampling_strategy=oversampling_ratio, random_state=42)
@@ -539,17 +550,6 @@ def main():
                 print(f'Validation set size: {len(X_val)}, SEP events: {np.sum(y_val)} ({np.mean(y_val)*100:.2f}%)')
                 print(f'Test set size: {len(X_test)}, SEP events: {np.sum(y_test)} ({np.mean(y_test)*100:.2f}%)')
                 print(f'Number of features: {X_train.shape[1]}')
-                
-                # Check for NaN and Inf values
-                print('\nChecking for NaN and Inf values:')
-                print(f'Train NaN count: {np.isnan(X_train).sum()}, Inf count: {np.isinf(X_train).sum()}')
-                print(f'Val NaN count: {np.isnan(X_val).sum()}, Inf count: {np.isinf(X_val).sum()}')
-                print(f'Test NaN count: {np.isnan(X_test).sum()}, Inf count: {np.isinf(X_test).sum()}')
-                
-                # Replace any NaN or Inf values with 0
-                X_train = np.nan_to_num(X_train, nan=0.0, posinf=0.0, neginf=0.0)
-                X_val = np.nan_to_num(X_val, nan=0.0, posinf=0.0, neginf=0.0)
-                X_test = np.nan_to_num(X_test, nan=0.0, posinf=0.0, neginf=0.0)
 
                 # Run feature selection
                 feature_indices = feature_selection(X_train, y_train, feature_names)
