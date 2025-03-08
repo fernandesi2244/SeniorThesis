@@ -16,6 +16,7 @@ from imblearn.over_sampling import RandomOverSampler
 from imblearn.under_sampling import RandomUnderSampler
 import os
 import random
+from sklearn.utils import shuffle
 
 NAME = 'sep_prediction_photospheric_data_grid_search'
 
@@ -443,7 +444,7 @@ def main():
 
     granularities = ['per-blob'] # ['per-blob', 'per-disk-4hr', 'per-disk-1d']
 
-    oversampling_ratios = [0.25, 0.65] # [0.1, 0.25, 0.5, 0.65, 0.75, 1] # pos:neg ratio. TODO: figure out some other day why > 0.65 isn't working
+    oversampling_ratios = [0.1, 0.25, 0.65, 0.75] # [0.1, 0.25, 0.5, 0.65, 0.75, 1] # pos:neg ratio. TODO: figure out some other day why > 0.65 isn't working
     
     # Define feature counts to test
     feature_counts = [20, 40, 60, 80] #[20, 40, 60, 80, 100]
@@ -524,6 +525,9 @@ def main():
                 # Under-sample majority class
                 rus = RandomUnderSampler(sampling_strategy=oversampling_ratio, random_state=42)
                 X_train, y_train = rus.fit_resample(X_train, y_train)
+
+                # Reshuffle the data
+                X_train, y_train = shuffle(X_train, y_train, random_state=42)
                 
                 print('After resampling:')
                 print('Train set count:', len(X_train))
