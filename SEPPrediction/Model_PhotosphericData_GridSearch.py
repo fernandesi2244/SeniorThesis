@@ -495,7 +495,7 @@ def main():
             feature_names = build_feature_names(granularity)
 
             # Load the data
-            X_train_OG, y_train, X_val, y_val, X_test, y_test = load_data(granularity)
+            X_train_OG, y_train_OG, X_val, y_val, X_test, y_test = load_data(granularity)
 
             # Check for NaN and Inf values
             print('\nChecking for NaN and Inf values:')
@@ -522,16 +522,16 @@ def main():
                 # Apply class balancing to training set
                 print('\nBefore resampling:')
                 print('Train set count:', len(X_train_OG))
-                print('Train set SEP count:', np.sum(y_train))
+                print('Train set SEP count:', np.sum(y_train_OG))
 
                 # if oversampling ratio is less than or equal to the current ratio, skip
-                if oversampling_ratio <= np.sum(y_train) / len(y_train):
+                if oversampling_ratio <= np.sum(y_train_OG) / len(y_train_OG):
                     print(f"Skipping oversampling ratio {oversampling_ratio} as positive class already significant enough.")
                     continue
                 
                 # Over-sample minority class
                 ros = RandomOverSampler(sampling_strategy=oversampling_ratio/2, random_state=42)
-                X_train, y_train = ros.fit_resample(X_train_OG, y_train)
+                X_train, y_train = ros.fit_resample(X_train_OG, y_train_OG)
                 
                 # Under-sample majority class
                 rus = RandomUnderSampler(sampling_strategy=oversampling_ratio, random_state=42)
