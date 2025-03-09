@@ -46,7 +46,7 @@ class SEPInputDataGenerator(tf.keras.utils.Sequence):
         self.shuffle = shuffle
 
         self.blob_df['datetime'] = pd.to_datetime(blob_df['Filename General'].apply(lambda x: x.split('.')[3]), format='%Y%m%d_%H%M%S_TAI')
-        self.blob_df['date'] = self.blob_df['datetime'].apply(lambda x: x.split('_')[0])
+        self.blob_df['date'] = self.blob_df['datetime'].dt.date
 
         self.granularity = granularity # either 'per-blob', 'per-disk-4hr', or 'per-disk-1d'
         if self.granularity == 'per-blob':
