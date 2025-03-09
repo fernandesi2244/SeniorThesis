@@ -45,7 +45,7 @@ class SEPInputDataGenerator(tf.keras.utils.Sequence):
         self.batch_size = batch_size
         self.shuffle = shuffle
 
-        self.blob_df['datetime'] = blob_df['Filename General'].apply(lambda x: x.split('.')[3])
+        self.blob_df['datetime'] = pd.to_datetime(blob_df['Filename General'].apply(lambda x: x.split('.')[3]), format='%Y%m%d_%H%M%S_TAI')
         self.blob_df['date'] = self.blob_df['datetime'].apply(lambda x: x.split('_')[0])
 
         self.granularity = granularity # either 'per-blob', 'per-disk-4hr', or 'per-disk-1d'
@@ -56,13 +56,16 @@ class SEPInputDataGenerator(tf.keras.utils.Sequence):
             self.unique_datetimes = self.blob_df['datetime'].unique()
             num_unique_datetimes = len(self.unique_datetimes)
             self.indexes = np.arange(num_unique_datetimes)
+            print('Number of unique datetimes:', num_unique_datetimes)
+            print('Number of blobs:', len(self.blob_df))
         elif self.granularity == 'per-disk-1d':
             self.unique_dates = self.blob_df['date'].unique()
             num_unique_dates = len(self.unique_dates)
             self.indexes = np.arange(num_unique_dates)
+            print('Number of unique days:', num_unique_dates)
+            print('Number of blobs:', len(self.blob_df))
 
         # just for consistency if not shuffling
-        self.blob_df['datetime'] = pd.to_datetime(self.blob_df['Filename General'].apply(lambda x: x.split('.')[3]), format='%Y%m%d_%H%M%S_TAI')
         self.blob_df = self.blob_df.sort_values(by='datetime')
 
         # Set random seed for comparison purposes since some of the models we're training
