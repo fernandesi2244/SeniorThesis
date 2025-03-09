@@ -37,6 +37,7 @@ class SEPInputDataGenerator(tf.keras.utils.Sequence):
     BLOB_VECTOR_COLUMNS_GENERAL = ['Latitude', 'Carrington Longitude', 'Gradient_00', 'Gradient_10', 'Gradient_30', 'Gradient_50', 'Shear_00', 'Shear_10', 'Shear_30', 'Shear_50', 'Phi', 'Total Unsigned Current Helicity', 'Total Photospheric Magnetic Free Energy Density', 'Total Unsigned Vertical Current', 'Abs of Net Current helicity', 'Is Plage', 'Stonyhurst Longitude']
     BLOB_ONE_TIME_INFO = ['Number of Recent Flares', 'Max Class Type of Recent Flares', 'Number of Recent CMEs', 'Max Product of Half Angle and Speed of Recent CMEs', 'Number of Sunspots', 'Max Flare Peak of Recent Flares', 'Min Temperature of Recent Flares', 'Median Emission Measure of Recent Flares', 'Median Duration of Recent Flares']
     TIMESERIES_STEPS = 6
+    TOP_N_BLOBS = 5
 
     def __init__(self, blob_df, batch_size, shuffle, granularity='per-blob', **kwargs):
         super().__init__(**kwargs)  # For multiprocessing parameters
@@ -179,7 +180,7 @@ class SEPInputDataGenerator(tf.keras.utils.Sequence):
 
                 # Sort the blobs in descending order of Phi
                 chosen_blob_df = chosen_blob_df.sort_values(by='Phi', ascending=False)
-                chosen_blob_df = chosen_blob_df.head(5)
+                chosen_blob_df = chosen_blob_df.head(SEPInputDataGenerator.TOP_N_BLOBS)
 
                 # take sum of recent flares
                 full_disk_num_recent_flares = chosen_blob_df['Number of Recent Flares'].sum()
@@ -250,7 +251,7 @@ class SEPInputDataGenerator(tf.keras.utils.Sequence):
                     overall_blob_data.extend(blob_timeseries_vector)
                 
                 # If there were less than 5 blobs, fill in the rest with 0s
-                while len(overall_blob_data) < 5 * SEPInputDataGenerator.TIMESERIES_STEPS * len(SEPInputDataGenerator.BLOB_VECTOR_COLUMNS_GENERAL):
+                while len(overall_blob_data) < SEPInputDataGenerator.TOP_N_BLOBS * SEPInputDataGenerator.TIMESERIES_STEPS * len(SEPInputDataGenerator.BLOB_VECTOR_COLUMNS_GENERAL):
                     overall_blob_data.extend(np.zeros(SEPInputDataGenerator.TIMESERIES_STEPS * len(SEPInputDataGenerator.BLOB_VECTOR_COLUMNS_GENERAL))) # add blob at a time
                 
                 complete_data_vector = full_disk_one_time_info + overall_blob_data

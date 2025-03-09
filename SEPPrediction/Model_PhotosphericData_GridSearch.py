@@ -69,7 +69,10 @@ def build_feature_names(granularity):
                     if t == 0:
                         feature_names.append(f"{col}_blob{i}")
                     else:
-                        feature_names.append(f"{col}_t-{t*4}_blob{i}")
+                        if granularity == 'per-disk-4hr':
+                            feature_names.append(f"{col}_t-{t*4}_blob{i}")
+                        elif granularity == 'per-disk-1d':
+                            feature_names.append(f"{col}_t-{t*24}_blob{i}")
     else:
         raise ValueError(f"Invalid granularity: {granularity}")
     
@@ -444,13 +447,13 @@ def main():
 
     granularities = ['per-disk-4hr', 'per-disk-1d'] # ['per-blob', 'per-disk-4hr', 'per-disk-1d']
 
-    oversampling_ratios = [0.1, 0.65, 1] # [0.1, 0.25, 0.5, 0.65, 0.75, 1] # pos:neg ratio. TODO: figure out some other day why > 0.65 isn't working
+    oversampling_ratios = [0.65] # [0.1, 0.25, 0.5, 0.65, 0.75, 1] # pos:neg ratio. TODO: figure out some other day why > 0.65 isn't working
     
     # Define feature counts to test
-    feature_counts = [20, 60, 100] #[20, 40, 60, 80, 100]
+    feature_counts = [20] #[20, 40, 60, 80, 100]
     
     # Define component counts to test for PCA
-    component_counts = [5, 20, 50] #[2, 3, 5, 10, 15, 20, 25, 30, 40, 50]
+    component_counts = [-1, 5] #[2, 3, 5, 10, 15, 20, 25, 30, 40, 50]
 
     # Model files
     model_types = [
@@ -578,22 +581,30 @@ def main():
                     for n_components in valid_components:
                         print('\n' + '-'*50)
                         print(f'Feature Count: {n_features}, PCA Components: {n_components}')
+                        if n_components == -1:
+                            print('Skipping PCA...')
                         print('-'*50)
 
                         # time model loading
                         if model_type == 'isolation_forest':
                             percent_pos = np.sum(y_train) / len(y_train)
-                            model = ModelConstructor.create_model(model_type, granularity, n_components, contamination=percent_pos)
+                            model = ModelConstructor.create_model('photospheric', model_type, granularity, n_components, contamination=percent_pos)
                         else:
-                            model = ModelConstructor.create_model(model_type, granularity, n_components)
+                            model = ModelConstructor.create_model('photospheric', model_type, granularity, n_components)
 
-                        # Apply PCA
-                        pca = PCA(n_components=n_components, random_state=42)
-                        X_train_pca = pca.fit_transform(X_train_selected)
-                        X_val_pca = pca.transform(X_val_selected)
+                        if n_components != -1:
+                            # Apply PCA
+                            pca = PCA(n_components=n_components, random_state=42)
+                            X_train_pca = pca.fit_transform(X_train_selected)
+                            X_val_pca = pca.transform(X_val_selected)
                         
-                        # Calculate variance explained
-                        explained_variance = np.sum(pca.explained_variance_ratio_) * 100
+                            # Calculate variance explained
+                            explained_variance = np.sum(pca.explained_variance_ratio_) * 100
+                        else:
+                            pca = None
+                            X_train_pca = X_train_selected
+                            X_val_pca = X_val_selected
+                            explained_variance = 100
                         
                         # time model training
                         train_start = time.time()
@@ -696,7 +707,10 @@ def main():
     X_test_selected = X_test[:, best_config['feature_indices']]
     
     # Apply PCA transformation
-    X_test_pca = best_config['pca'].transform(X_test_selected)
+    if best_config['n_components'] == -1:
+        X_test_pca = X_test_selected
+    else:
+        X_test_pca = best_config['pca'].transform(X_test_selected)
     
     # Make predictions
     y_test_pred = best_config['model'].predict(X_test_pca)
