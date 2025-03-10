@@ -208,6 +208,9 @@ class ModelConstructor(object):
     @staticmethod
     def get_nn_model(dataloader, granularity, n_components, version):
         if n_components == -1:
+            # Make assumption we're dealing with per-disk granularity
+            assert granularity.startswith('per-disk')
+            
             # Special case: Process different parts of the input vector with specialized blocks
             if version == 'simple':
                 # Define dimensions

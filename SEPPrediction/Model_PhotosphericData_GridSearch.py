@@ -445,15 +445,15 @@ def main():
     start_time = time.time()
     print(f"Starting combined feature selection and PCA analysis at {time.ctime()}")
 
-    granularities = ['per-disk-4hr', 'per-disk-1d'] # ['per-blob', 'per-disk-4hr', 'per-disk-1d']
+    granularities = ['per-blob', 'per-disk-4hr', 'per-disk-1d'] # ['per-blob', 'per-disk-4hr', 'per-disk-1d']
 
-    oversampling_ratios = [0.65] # [0.1, 0.25, 0.5, 0.65, 0.75, 1] # pos:neg ratio. TODO: figure out some other day why > 0.65 isn't working
+    oversampling_ratios = [0.1, 0.25, 0.5, 0.65, 0.75, 1] # [0.1, 0.25, 0.5, 0.65, 0.75, 1] # pos:neg ratio. TODO: figure out some other day why > 0.65 isn't working
     
     # Define feature counts to test
-    feature_counts = [20] #[20, 40, 60, 80, 100]
+    feature_counts = [20, 40, 60, 80, 100] #[20, 40, 60, 80, 100]
     
     # Define component counts to test for PCA
-    component_counts = [-1, 5] #[2, 3, 5, 10, 15, 20, 25, 30, 40, 50]
+    component_counts = [-1, 2, 3, 5, 10, 15, 20, 25, 30, 40, 50] #[-1, 2, 3, 5, 10, 15, 20, 25, 30, 40, 50]
 
     # Model files
     model_types = [
@@ -579,6 +579,10 @@ def main():
                     
                     # Loop through different PCA component counts
                     for n_components in valid_components:
+                        if granularity == 'per-blob' and n_components == -1:
+                            print('Skipping non-PCA analysis for per-blob granularity...')
+                            continue
+
                         print('\n' + '-'*50)
                         print(f'Feature Count: {n_features}, PCA Components: {n_components}')
                         if n_components == -1:
