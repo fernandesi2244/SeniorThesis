@@ -450,16 +450,36 @@ def main():
     oversampling_ratios = [0.1, 0.25, 0.5, 0.65, 0.75, 1] # [0.1, 0.25, 0.5, 0.65, 0.75, 1] # pos:neg ratio. TODO: figure out some other day why > 0.65 isn't working
     
     # Define feature counts to test
-    feature_counts = [20, 40, 60, 80, 100] #[20, 40, 60, 80, 100]
+    feature_counts = [-1, 20, 40, 60, 80, 100] #[20, 40, 60, 80, 100]
     
     # Define component counts to test for PCA
     component_counts = [-1, 2, 3, 5, 10, 15, 20, 25, 30, 40, 50] #[-1, 2, 3, 5, 10, 15, 20, 25, 30, 40, 50]
 
     # Model files
+    # model_types = [
+    #     'random_forest_simple',
+    #     'random_forest_complex',
+    #     'isolation_forest',
+    #     #'gaussian_RBF',
+    #     #'gaussian_matern',
+    #     'nn_simple',
+    #     'nn_complex',
+    #     'logistic_regression_v1',
+    #     'logistic_regression_v2',
+    #     'gbm',
+    #     'lightgbm',
+    #     'xgboost',
+    #     'svm_rbf',
+    #     'svm_poly',
+    #     'knn_v1',
+    #     'knn_v2',
+    #     'knn_v3',
+    # ]
+
     model_types = [
-        'random_forest_simple',
-        'random_forest_complex',
-        'isolation_forest',
+        #'random_forest_simple',
+        #'random_forest_complex',
+        #'isolation_forest',
         #'gaussian_RBF',
         #'gaussian_matern',
         'nn_simple',
@@ -560,6 +580,10 @@ def main():
                 
                 # Loop through different feature counts
                 for n_features in feature_counts:
+                    if n_features == -1:
+                        print('Skipping feature selection...')
+                        n_features = len(feature_indices)
+
                     if n_features > len(feature_indices):
                         print(f"Warning: Requested {n_features} features, but only {len(feature_indices)} available. Using all available features.")
                         n_features = len(feature_indices)
@@ -581,6 +605,11 @@ def main():
                     for n_components in valid_components:
                         if granularity == 'per-blob' and n_components == -1:
                             print('Skipping non-PCA analysis for per-blob granularity...')
+                            continue
+
+                        # now, if n_components == -1, then it must be that granularity is full-disk
+                        if n_components == -1 and model_type.startswith('nn') and not n_features == -1:
+                            print('Skipping non-PCA analysis for full-disk NNs where feature reduction occurs')
                             continue
 
                         print('\n' + '-'*50)
