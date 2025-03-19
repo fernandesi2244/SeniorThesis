@@ -267,6 +267,55 @@ def get_total_unsigned_magnetic_flux(bx_3D, by_3D, bz_3D):
     
     return total_flux_of_AR_box
 
+def get_num_field_lines_leaving_top(bx_3D, by_3D, bz_3D):
+    """
+    Compute the number of field lines leaving the top of the volume
+    as a measure of open lines over which charged particles can escape.
+    """
+
+    Bz_top = bz_3D[:,:,-1]
+    By_top = by_3D[:,:,-1]
+    Bx_top = bx_3D[:,:,-1]
+
+    # For noise removal
+    By_surf_10 = by_3D[:,:,10]
+    Bx_surf_10 = bx_3D[:,:,10]    
+
+    inx = (np.abs(By_surf_10) <= 10)
+    By_top = np.array(By_top).copy()
+    By_top[inx] = np.nan
+
+    inx =  (np.abs(Bx_surf_10) <= 10 )
+    Bx_top = np.array(Bx_top).copy()
+    Bx_top[inx] = np.nan
+
+    # Horizontal solar magnetic field on the top layer
+    BH_surf = np.sqrt(Bx_top**2+By_top**2)
+
+    # Find the number of field lines exiting the top layer, which is approximated by
+    # the number of field lines with an angle greater than 45 degrees between the vertical
+    # solar magnetic field (Bz) and the horizontal solar magnetic field (BH_surf)
+    num_field_lines_exiting_top = 0
+
+    for i in range(1, Bz_top.shape[1]-1):
+        for j in range(1, Bz_top.shape[0]-1):
+            # Skip pixels with NaN values
+            if np.isnan(Bz_top[j, i]) or np.isnan(BH_surf[j, i]):
+                continue
+
+            angle_data = np.arctan2(Bz_top[j, i],BH_surf[j, i]) * (180 / np.pi)      
+
+            if np.abs(angle_data) >= 45:
+                num_field_lines_exiting_top += 1
+
+    # optimally, we would have returned the ratio of field lines exiting the top
+    # to the total number of field lines in the volume just for that blob, but this
+    # is harder to calculate given the resizing that is done to make each blob fit in
+    # the fixed-size volume. NOTE: this sort of normalization can be done in post-processing
+    # by dividing by some measure of the size of the region, like total unsigned magnetic flux (phi)
+    # or simply the magnetic area.
+    return num_field_lines_exiting_top
+
 def get_blob_loc(labeled, blob_i):
     """
     Gets the lat/lon of the centroid of the blob indicated by blob_i.
@@ -430,14 +479,15 @@ def main():
             mean_grad_total_mag_field = get_mean_gradient_total_magnetic_field(bx_3D_blob, by_3D_blob, bz_3D_blob)
             tot_mag_lorentz_force = get_total_magnitude_lorentz_force(bx_3D_blob, by_3D_blob, bz_3D_blob)
             tot_unsigned_mag_flux = get_total_unsigned_magnetic_flux(bx_3D_blob, by_3D_blob, bz_3D_blob)
+            num_field_lines_leaving_top = get_num_field_lines_leaving_top(bx_3D_blob, by_3D_blob, bz_3D_blob)
         except Exception as e:
             print(f'ERROR: Failed to calculate volume parameters for targetARGen {target_ar_gen}: {repr(e)}')
             logger.log(f'Failed to calculate volume parameters for targetARGen {target_ar_gen}: {repr(e)}', 'HIGH')
             exit(1)
 
         # Make a new DF with the calculated parameters as one row and save it as a pickle file.
-        df = pd.DataFrame(columns=['Filename General', 'Blob Index', 'Latitude', 'Carrington Longitude', 'Volume Total Magnetic Energy', 'Volume Total Unsigned Current Helicity', 'Volume Total Absolute Net Current Helicity', 'Volume Mean Shear Angle', 'Volume Total Unsigned Volume Vertical Current', 'Volume Twist Parameter Alpha', 'Volume Mean Gradient of Vertical Magnetic Field', 'Volume Mean Gradient of Total Magnetic Field', 'Volume Total Magnitude of Lorentz Force', 'Volume Total Unsigned Magnetic Flux'])
-        df.loc[0] = [target_ar_gen, blob_index, blob_lat, blob_lon, tot_mag_energy, tot_unsigned_current_helicity, tot_abs_net_current_helicity, mean_shear_angle, tot_unsigned_volume_vertical_current, twist_param_alpha, mean_grad_vert_mag_field, mean_grad_total_mag_field, tot_mag_lorentz_force, tot_unsigned_mag_flux]
+        df = pd.DataFrame(columns=['Filename General', 'Blob Index', 'Latitude', 'Carrington Longitude', 'Volume Total Magnetic Energy', 'Volume Total Unsigned Current Helicity', 'Volume Total Absolute Net Current Helicity', 'Volume Mean Shear Angle', 'Volume Total Unsigned Volume Vertical Current', 'Volume Twist Parameter Alpha', 'Volume Mean Gradient of Vertical Magnetic Field', 'Volume Mean Gradient of Total Magnetic Field', 'Volume Total Magnitude of Lorentz Force', 'Volume Total Unsigned Magnetic Flux', 'Number of Field Lines Leaving Top'])
+        df.loc[0] = [target_ar_gen, blob_index, blob_lat, blob_lon, tot_mag_energy, tot_unsigned_current_helicity, tot_abs_net_current_helicity, mean_shear_angle, tot_unsigned_volume_vertical_current, twist_param_alpha, mean_grad_vert_mag_field, mean_grad_total_mag_field, tot_mag_lorentz_force, tot_unsigned_mag_flux, num_field_lines_leaving_top]
         # save as pickle file to OutputData/Temp with same name as target_ar_gen
         df.to_pickle(os.path.join(rootDir, 'OutputData', 'Temp', f'{target_ar_gen}-{blob_index}.pkl'))
 

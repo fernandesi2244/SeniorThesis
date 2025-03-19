@@ -79,7 +79,7 @@ def processResultsAsTheyComeIn():
 def main():
     if not os.path.exists(PARAMETERIZATION_CSV_PATH):
         # Create empty df with required columns and save as CSV.
-        df = pd.DataFrame(columns=['Filename General', 'Blob Index', 'Latitude', 'Carrington Longitude', 'Volume Total Magnetic Energy', 'Volume Total Unsigned Current Helicity', 'Volume Total Absolute Net Current Helicity', 'Volume Mean Shear Angle', 'Volume Total Unsigned Volume Vertical Current', 'Volume Twist Parameter Alpha', 'Volume Mean Gradient of Vertical Magnetic Field', 'Volume Mean Gradient of Total Magnetic Field', 'Volume Total Magnitude of Lorentz Force', 'Volume Total Unsigned Magnetic Flux'])
+        df = pd.DataFrame(columns=['Filename General', 'Blob Index', 'Latitude', 'Carrington Longitude', 'Volume Total Magnetic Energy', 'Volume Total Unsigned Current Helicity', 'Volume Total Absolute Net Current Helicity', 'Volume Mean Shear Angle', 'Volume Total Unsigned Volume Vertical Current', 'Volume Twist Parameter Alpha', 'Volume Mean Gradient of Vertical Magnetic Field', 'Volume Mean Gradient of Total Magnetic Field', 'Volume Total Magnitude of Lorentz Force', 'Volume Total Unsigned Magnetic Flux', 'Number of Field Lines Leaving Top'])
         df.to_csv(PARAMETERIZATION_CSV_PATH, index=False)
     
     # Generated volume example file: Bout_hmi.sharp_cea_720s.10000.20230828_090000_TAI.bin
