@@ -1,4 +1,4 @@
-from PhotosphericDataLoader import SEPInputDataGenerator
+from CoronalDataLoader import SEPInputDataGenerator
 from ModelConstructor import ModelConstructor
 import pandas as pd
 import numpy as np
@@ -18,10 +18,10 @@ import os
 import random
 from sklearn.utils import shuffle
 
-NAME = 'sep_prediction_photospheric_data_grid_search'
+NAME = 'sep_prediction_coronal_data_grid_search'
 
 # Create output directory for results
-RESULTS_DIR = f'results/photospheric_data'
+RESULTS_DIR = f'results/coronal_data'
 os.makedirs(RESULTS_DIR, exist_ok=True)
 
 # Set random seed for reproducibility
@@ -480,20 +480,20 @@ def main():
         'random_forest_simple',
         'random_forest_complex',
         'isolation_forest',
-        # #'gaussian_RBF',
-        # #'gaussian_matern',
-        # 'nn_simple',
-        # 'nn_complex',
-        # 'logistic_regression_v1',
-        # 'logistic_regression_v2',
-        # 'gbm',
-        # 'lightgbm',
-        # 'xgboost',
-        # 'svm_rbf',
-        # 'svm_poly',
-        # 'knn_v1',
-        # 'knn_v2',
-        # 'knn_v3',
+        # 'gaussian_RBF',
+        # 'gaussian_matern',
+        'nn_simple',
+        'nn_complex',
+        'logistic_regression_v1',
+        'logistic_regression_v2',
+        'gbm',
+        'lightgbm',
+        'xgboost',
+        'svm_rbf',
+        'svm_poly',
+        'knn_v1',
+        'knn_v2',
+        'knn_v3',
     ]
 
     # TODO: later, look at ensembling techniques
@@ -621,9 +621,9 @@ def main():
                         # time model loading
                         if model_type == 'isolation_forest':
                             percent_pos = np.sum(y_train) / len(y_train)
-                            model = ModelConstructor.create_model('photospheric', model_type, granularity, n_components, contamination=percent_pos)
+                            model = ModelConstructor.create_model('coronal', model_type, granularity, n_components, contamination=percent_pos)
                         else:
-                            model = ModelConstructor.create_model('photospheric', model_type, granularity, n_components)
+                            model = ModelConstructor.create_model('coronal', model_type, granularity, n_components)
 
                         if n_components != -1:
                             # Apply PCA
