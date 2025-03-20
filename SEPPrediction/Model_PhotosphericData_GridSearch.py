@@ -746,8 +746,19 @@ def main():
         X_test_pca = best_config['pca'].transform(X_test_selected)
     
     # Make predictions
-    y_test_pred = best_config['model'].predict(X_test_pca)
-    y_test_pred_proba = best_config['model'].predict_proba(X_test_pca)[:, 1]
+    if best_config['model_type'] == 'isolation_forest':
+        y_test_pred = best_config['model'].predict(X_test_pca)
+        y_test_pred[y_test_pred == 1] = 0
+        y_test_pred[y_test_pred == -1] = 1
+
+        anomaly_scores = best_config['model'].decision_function(X_test_pca)
+        y_pred_proba = (anomaly_scores - np.min(anomaly_scores)) / (np.max(anomaly_scores) - np.min(anomaly_scores))
+    elif best_config['model_type'] == 'nn_simple' or best_config['model_type'] == 'nn_complex':
+        y_test_pred_proba = best_config['model'].predict(X_test_pca)
+        y_test_pred = (y_test_pred_proba > 0.5).astype(int)
+    else:
+        y_test_pred = best_config['model'].predict(X_test_pca)
+        y_test_pred_proba = best_config['model'].predict_proba(X_test_pca)[:, 1]
     
     # Evaluate performance
     test_metrics = evaluate_model(y_test, y_test_pred, y_test_pred_proba, "Test")
