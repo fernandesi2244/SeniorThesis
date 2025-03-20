@@ -263,4 +263,4 @@ def toIntString(floatNum):
 
 rowNum = 0
 unified_data = unified_data.apply(add_events, axis=1)
-unified_data.to_csv('../OutputData/UnifiedActiveRegionData_with_all_events_including_new_flares_and_TEBBS_fix_and_flare_cme_labels.csv', index=False)
+unified_data.to_csv('../OutputData/UnifiedActiveRegionData_with_updated_SEP_list_but_no_line_count.csv', index=False)
