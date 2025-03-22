@@ -59,13 +59,13 @@ def get_total_magnetic_energy(bx_3D, by_3D, bz_3D):
     """
 
     global dx, dy, dz, dV
-        
+    
     # Read in FITS headers
-    xratio_volume_to_hmi = 400/bitmap.data.shape[1]
-    yratio_volume_to_hmi = 200/bitmap.data.shape[0]
-    cdelt1 = (math.atan((bitmap.meta['rsun_ref']*(bitmap.meta['cdelt1'] * xratio_volume_to_hmi)*np.pi/180)/(bitmap.meta['dsun_obs'])))*(180/np.pi)*(3600)  
+    xratio_hmi_to_volume = bitmap.data.shape[1] / 400
+    yratio_hmi_to_volume = bitmap.data.shape[0] / 200
+    cdelt1 = (math.atan((bitmap.meta['rsun_ref']*(bitmap.meta['cdelt1'] * xratio_hmi_to_volume)*np.pi/180)/(bitmap.meta['dsun_obs'])))*(180/np.pi)*(3600)  
     dx = (cdelt1*(bitmap.meta['rsun_ref']/bitmap.meta['rsun_obs'])*100.0)
-    cdelt2 = (math.atan((bitmap.meta['rsun_ref']*(bitmap.meta['cdelt2'] * yratio_volume_to_hmi)*np.pi/180)/(bitmap.meta['dsun_obs'])))*(180/np.pi)*(3600)
+    cdelt2 = (math.atan((bitmap.meta['rsun_ref']*(bitmap.meta['cdelt2'] * yratio_hmi_to_volume)*np.pi/180)/(bitmap.meta['dsun_obs'])))*(180/np.pi)*(3600)
     dy = (cdelt2*(bitmap.meta['rsun_ref']/bitmap.meta['rsun_obs'])*100.0)
 
     # Calculate the squared magnetic field magnitude at each point

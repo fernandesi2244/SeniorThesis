@@ -1,6 +1,8 @@
 import numpy as np
 from scipy import ndimage
 import matplotlib.pyplot as plt
+import sunpy.map
+import math
 
 def load_volume_components(filename):
     """
@@ -76,7 +78,7 @@ def get_point_of_interest(bz_3D):
 
     return center_row, center_col
 
-def get_region_of_interest_volume(bx_3D, by_3D, bz_3D):
+def get_region_of_interest_volume(brMapFileLoc, bx_3D, by_3D, bz_3D):
     """
     Get the region of interest in the 3D magnetic field volume.
 
@@ -92,8 +94,13 @@ def get_region_of_interest_volume(bx_3D, by_3D, bz_3D):
     center_row, center_col = get_point_of_interest(bz_3D)
 
     # Find the height in the volume that corresponds to 2 MegaMeters
-    height = 2
-    height_index = 20 # TODO: Find the height index that corresponds to 2 MegaMeters
+    target_height = 2.0  # MegaMeters
+    brMap = sunpy.map.Map(brMapFileLoc)
+    xratio_hmi_to_volume = brMap.data.shape[1] / 400 # px_HMI / px_volume, so cdelt1 * xratio_hmi_to_volume = deg/px_HMI * px_HMI/px_volume = deg/px_volume
+    cdelt1 = (math.atan((brMap.meta['rsun_ref']*(brMap.meta['cdelt1'] * xratio_hmi_to_volume)*np.pi/180)/(brMap.meta['dsun_obs'])))*(180/np.pi)*(3600) # arcsec/pixel in volume space
+    dx = (cdelt1*(brMap.meta['rsun_ref']/brMap.meta['rsun_obs']))/1e6 # Mm/pixel in volume space
+    dz = dx # NOTE: approximation that we're currently using, but there's probably a much more precise value we can calculate here
+    height_2Mm_index = int(target_height / dz)
 
     # Construct a box centered at the center point that extends 25 pixels in each
     # cardinal direction. If the region cannot be constructed because the center
@@ -107,14 +114,14 @@ def get_region_of_interest_volume(bx_3D, by_3D, bz_3D):
             for k in range(20):
                 if center_row - 10 + i >= 0 and center_row - 10 + i < 200 and \
                    center_col - 10 + j >= 0 and center_col - 10 + j < 400 and \
-                   height_index - 10 + k >= 0 and height_index - 10 + k < 100:
-                    region[i, j, k, 0] = bx_3D[center_row - 10 + i, center_col - 10 + j, height_index - 10 + k]
-                    region[i, j, k, 1] = by_3D[center_row - 10 + i, center_col - 10 + j, height_index - 10 + k]
-                    region[i, j, k, 2] = bz_3D[center_row - 10 + i, center_col - 10 + j, height_index - 10 + k]
+                   height_2Mm_index - 10 + k >= 0 and height_2Mm_index - 10 + k < 100:
+                    region[i, j, k, 0] = bx_3D[center_row - 10 + i, center_col - 10 + j, height_2Mm_index - 10 + k]
+                    region[i, j, k, 1] = by_3D[center_row - 10 + i, center_col - 10 + j, height_2Mm_index - 10 + k]
+                    region[i, j, k, 2] = bz_3D[center_row - 10 + i, center_col - 10 + j, height_2Mm_index - 10 + k]
 
     return region
 
-def get_region_of_interest_planes(bx_3D, by_3D, bz_3D):
+def get_region_of_interest_planes_and_cube(brMapFileLoc, bx_3D, by_3D, bz_3D):
     """
     Get the 5 planes of the volume in each direction that are centered at
     the point of interest. Note that the x-direction represents the rows and
@@ -134,7 +141,13 @@ def get_region_of_interest_planes(bx_3D, by_3D, bz_3D):
     center_row, center_col = get_point_of_interest(bz_3D)
 
     # Find the height in the volume that corresponds to 2 MegaMeters
-    height_index = 20 # TODO: Find the height index that corresponds to 2 MegaMeters
+    target_height = 2.0  # MegaMeters
+    brMap = sunpy.map.Map(brMapFileLoc)
+    xratio_hmi_to_volume = brMap.data.shape[1] / 400 # px_HMI / px_volume, so cdelt1 * xratio_hmi_to_volume = deg/px_HMI * px_HMI/px_volume = deg/px_volume
+    cdelt1 = (math.atan((brMap.meta['rsun_ref']*(brMap.meta['cdelt1'] * xratio_hmi_to_volume)*np.pi/180)/(brMap.meta['dsun_obs'])))*(180/np.pi)*(3600) # arcsec/pixel in volume space
+    dx = (cdelt1*(brMap.meta['rsun_ref']/brMap.meta['rsun_obs']))/1e6 # Mm/pixel in volume space
+    dz = dx # NOTE: approximation that we're currently using, but there's probably a much more precise value we can calculate here
+    height_2Mm_index = int(target_height / dz)
 
     nx, ny, nz = 200, 400, 100
 
@@ -143,17 +156,17 @@ def get_region_of_interest_planes(bx_3D, by_3D, bz_3D):
 
     # Compute offset if necessary
     offset_xy = 0
-    if height_index - 2 < 0:
-        offset_xy = 2 - height_index
-    if height_index + 2 >= nz:
-        offset_xy = nz - 1 - height_index - 2
+    if height_2Mm_index - 2 < 0:
+        offset_xy = 2 - height_2Mm_index
+    if height_2Mm_index + 2 >= nz:
+        offset_xy = nz - 1 - height_2Mm_index - 2
 
     for i in range(5):
         for j in range(nx):
             for k in range(ny):
-                planes_xy[i, j, k, 0] = bx_3D[j, k, height_index - 2 + i + offset_xy]
-                planes_xy[i, j, k, 1] = by_3D[j, k, height_index - 2 + i + offset_xy]
-                planes_xy[i, j, k, 2] = bz_3D[j, k, height_index - 2 + i + offset_xy]
+                planes_xy[i, j, k, 0] = bx_3D[j, k, height_2Mm_index - 2 + i + offset_xy]
+                planes_xy[i, j, k, 1] = by_3D[j, k, height_2Mm_index - 2 + i + offset_xy]
+                planes_xy[i, j, k, 2] = bz_3D[j, k, height_2Mm_index - 2 + i + offset_xy]
 
     # Construct the 5 planes in the x-z direction
     planes_xz = np.zeros((5, nx, nz, 3))
@@ -198,16 +211,19 @@ def get_region_of_interest_planes(bx_3D, by_3D, bz_3D):
             for k in range(5):
                 if center_row - 2 + i + offset_yz >= 0 and center_row - 2 + i + offset_yz < nx and \
                    center_col - 2 + j + offset_xz >= 0 and center_col - 2 + j + offset_xz < ny and \
-                   height_index - 2 + k + offset_xy >= 0 and height_index - 2 + k + offset_xy < nz:
-                    cube[i, j, k, 0] = bx_3D[center_row - 2 + i + offset_yz, center_col - 2 + j + offset_xz, height_index - 2 + k + offset_xy]
-                    cube[i, j, k, 1] = by_3D[center_row - 2 + i + offset_yz, center_col - 2 + j + offset_xz, height_index - 2 + k + offset_xy]
-                    cube[i, j, k, 2] = bz_3D[center_row - 2 + i + offset_yz, center_col - 2 + j + offset_xz, height_index - 2 + k + offset_xy]
+                   height_2Mm_index - 2 + k + offset_xy >= 0 and height_2Mm_index - 2 + k + offset_xy < nz:
+                    cube[i, j, k, 0] = bx_3D[center_row - 2 + i + offset_yz, center_col - 2 + j + offset_xz, height_2Mm_index - 2 + k + offset_xy]
+                    cube[i, j, k, 1] = by_3D[center_row - 2 + i + offset_yz, center_col - 2 + j + offset_xz, height_2Mm_index - 2 + k + offset_xy]
+                    cube[i, j, k, 2] = bz_3D[center_row - 2 + i + offset_yz, center_col - 2 + j + offset_xz, height_2Mm_index - 2 + k + offset_xy]
 
     return planes_xy, planes_xz, planes_yz, cube
 
-# if __name__ == "__main__":
-    # bx_3D, by_3D, bz_3D = load_volume_components('C:/Users/ibfernan/Documents/SampleVolumes/Bout_hmi.sharp_cea_720s.7115.20170903_050000_TAI.bin')
-    # region_of_interest = get_region_of_interest_volume(bx_3D, by_3D, bz_3D)
+if __name__ == "__main__":
+    pass
+    # bx_3D, by_3D, bz_3D = load_volume_components('D:\Downloads\Bout_hmi.sharp_cea_720s.7115.20170903_050000_TAI.bin')
+    # brMapLocation = 'D:\MagPy\Input Data\Test Data\HMI\Definitive SHARPs\hmi.sharp_cea_720s.7115.20170905_013600_TAI.Br.fits'
+    # region_of_interest = get_region_of_interest_volume(brMapLocation, bx_3D, by_3D, bz_3D)
+    # get_region_of_interest_planes_and_cube(brMapLocation, bx_3D, by_3D, bz_3D)
     # print(region_of_interest.shape)
     # # plot bottom layer of Bz
     # plt.imshow(region_of_interest[:, :, 0, 2], cmap='gray')
