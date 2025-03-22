@@ -78,7 +78,7 @@ def get_point_of_interest(bz_3D):
 
     return center_row, center_col
 
-def get_region_of_interest_volume(brMapFileLoc, bx_3D, by_3D, bz_3D):
+def get_region_of_interest_volume(associated_SunPy_map, bx_3D, by_3D, bz_3D):
     """
     Get the region of interest in the 3D magnetic field volume.
 
@@ -95,10 +95,10 @@ def get_region_of_interest_volume(brMapFileLoc, bx_3D, by_3D, bz_3D):
 
     # Find the height in the volume that corresponds to 2 MegaMeters
     target_height = 2.0  # MegaMeters
-    brMap = sunpy.map.Map(brMapFileLoc)
-    xratio_hmi_to_volume = brMap.data.shape[1] / 400 # px_HMI / px_volume, so cdelt1 * xratio_hmi_to_volume = deg/px_HMI * px_HMI/px_volume = deg/px_volume
-    cdelt1 = (math.atan((brMap.meta['rsun_ref']*(brMap.meta['cdelt1'] * xratio_hmi_to_volume)*np.pi/180)/(brMap.meta['dsun_obs'])))*(180/np.pi)*(3600) # arcsec/pixel in volume space
-    dx = (cdelt1*(brMap.meta['rsun_ref']/brMap.meta['rsun_obs']))/1e6 # Mm/pixel in volume space
+    map = associated_SunPy_map
+    xratio_hmi_to_volume = map.data.shape[1] / 400 # px_HMI / px_volume, so cdelt1 * xratio_hmi_to_volume = deg/px_HMI * px_HMI/px_volume = deg/px_volume
+    cdelt1 = (math.atan((map.meta['rsun_ref']*(map.meta['cdelt1'] * xratio_hmi_to_volume)*np.pi/180)/(map.meta['dsun_obs'])))*(180/np.pi)*(3600) # arcsec/pixel in volume space
+    dx = (cdelt1*(map.meta['rsun_ref']/map.meta['rsun_obs']))/1e6 # Mm/pixel in volume space
     dz = dx # NOTE: approximation that we're currently using, but there's probably a much more precise value we can calculate here
     height_2Mm_index = int(target_height / dz)
 
@@ -121,7 +121,7 @@ def get_region_of_interest_volume(brMapFileLoc, bx_3D, by_3D, bz_3D):
 
     return region
 
-def get_region_of_interest_planes_and_cube(brMapFileLoc, bx_3D, by_3D, bz_3D):
+def get_region_of_interest_planes_and_cube(associated_SunPy_map, bx_3D, by_3D, bz_3D):
     """
     Get the 5 planes of the volume in each direction that are centered at
     the point of interest. Note that the x-direction represents the rows and
@@ -142,10 +142,10 @@ def get_region_of_interest_planes_and_cube(brMapFileLoc, bx_3D, by_3D, bz_3D):
 
     # Find the height in the volume that corresponds to 2 MegaMeters
     target_height = 2.0  # MegaMeters
-    brMap = sunpy.map.Map(brMapFileLoc)
-    xratio_hmi_to_volume = brMap.data.shape[1] / 400 # px_HMI / px_volume, so cdelt1 * xratio_hmi_to_volume = deg/px_HMI * px_HMI/px_volume = deg/px_volume
-    cdelt1 = (math.atan((brMap.meta['rsun_ref']*(brMap.meta['cdelt1'] * xratio_hmi_to_volume)*np.pi/180)/(brMap.meta['dsun_obs'])))*(180/np.pi)*(3600) # arcsec/pixel in volume space
-    dx = (cdelt1*(brMap.meta['rsun_ref']/brMap.meta['rsun_obs']))/1e6 # Mm/pixel in volume space
+    map = associated_SunPy_map
+    xratio_hmi_to_volume = map.data.shape[1] / 400 # px_HMI / px_volume, so cdelt1 * xratio_hmi_to_volume = deg/px_HMI * px_HMI/px_volume = deg/px_volume
+    cdelt1 = (math.atan((map.meta['rsun_ref']*(map.meta['cdelt1'] * xratio_hmi_to_volume)*np.pi/180)/(map.meta['dsun_obs'])))*(180/np.pi)*(3600) # arcsec/pixel in volume space
+    dx = (cdelt1*(map.meta['rsun_ref']/map.meta['rsun_obs']))/1e6 # Mm/pixel in volume space
     dz = dx # NOTE: approximation that we're currently using, but there's probably a much more precise value we can calculate here
     height_2Mm_index = int(target_height / dz)
 
