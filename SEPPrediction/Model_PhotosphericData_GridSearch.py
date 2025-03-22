@@ -334,7 +334,7 @@ def load_data(granularity):
         y_test = np.load(test_labels_file)
     else:
         # Load dataset
-        blob_df_filename = '../OutputData/UnifiedActiveRegionData_with_all_events_including_new_flares_and_TEBBS_fix.csv'
+        blob_df_filename = '../OutputData/UnifiedActiveRegionData_with_updated_SEP_list_but_no_line_count.csv'
         blob_df = pd.read_csv(blob_df_filename)
         
         print(f"Loaded dataset with {len(blob_df)} rows")
