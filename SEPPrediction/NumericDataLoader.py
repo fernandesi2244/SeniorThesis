@@ -26,7 +26,7 @@ UNIFIED_DATA_DIR = os.path.join(rootDir, 'OutputData', 'UnifiedActiveRegionData.
 
 class SEPInputDataGenerator(tf.keras.utils.Sequence):
     BLOB_VECTOR_COLUMNS_GENERAL = ['Latitude', 'Carrington Longitude', 'Volume Total Magnetic Energy', 'Volume Total Unsigned Current Helicity', 'Volume Total Absolute Net Current Helicity', 'Volume Mean Shear Angle', 'Volume Total Unsigned Volume Vertical Current', 'Volume Twist Parameter Alpha', 'Volume Mean Gradient of Vertical Magnetic Field', 'Volume Mean Gradient of Total Magnetic Field', 'Volume Total Magnitude of Lorentz Force', 'Volume Total Unsigned Magnetic Flux', 'Gradient_00', 'Gradient_10', 'Gradient_30', 'Gradient_50', 'Shear_00', 'Shear_10', 'Shear_30', 'Shear_50', 'Phi', 'Total Unsigned Current Helicity', 'Total Photospheric Magnetic Free Energy Density', 'Total Unsigned Vertical Current', 'Abs of Net Current helicity', 'Is Plage', 'Stonyhurst Longitude']
-    BLOB_ONE_TIME_INFO = ['Number of Recent Flares', 'Max Class Type of Recent Flares', 'Number of Recent CMEs', 'Max Product of Half Angle and Speed of Recent CMEs', 'Number of Sunspots', 'Max Flare Peak of Recent Flares', 'Min Temperature of Recent Flares', 'Median Emission Measure of Recent Flares', 'Median Duration of Recent Flares']
+    BLOB_ONE_TIME_INFO = ['Number of Recent Flares', 'Max Class Type of Recent Flares', 'Number of Recent CMEs', 'Max Product of Half Angle and Speed of Recent CMEs', 'Number of Sunspots', 'Max Flare Peak of Recent Flares', 'Min Temperature of Recent Flares', 'Median Emission Measure of Recent Flares', 'Median Duration of Recent Flares', 'Number of Recent SEPs', 'Number of Recent Subthreshold SEPs']
     TIMESERIES_STEPS = 6
     TOP_N_BLOBS = 5
 
@@ -171,6 +171,7 @@ class SEPInputDataGenerator(tf.keras.utils.Sequence):
 
                 # Sort the blobs in descending order of Phi
                 chosen_blob_df = chosen_blob_df.sort_values(by='Phi', ascending=False)
+                chosen_blob_df_all_blobs = chosen_blob_df.copy()
                 chosen_blob_df = chosen_blob_df.head(SEPInputDataGenerator.TOP_N_BLOBS)
 
                 # take sum of recent flares
@@ -191,10 +192,14 @@ class SEPInputDataGenerator(tf.keras.utils.Sequence):
                 full_disk_median_emission_measure = chosen_blob_df['Median Emission Measure of Recent Flares'].median()
                 full_disk_median_duration = chosen_blob_df['Median Duration of Recent Flares'].median()
 
+                full_disk_num_recent_SEPs = chosen_blob_df['Number of Recent SEPs'].sum()
+                full_disk_num_recent_subthreshold_SEPs = chosen_blob_df['Number of Recent Subthreshold SEPs'].sum()
+
                 full_disk_one_time_info = [
                     full_disk_num_recent_flares, full_disk_max_class_type, full_disk_num_recent_cmes,
                     full_disk_max_product_half_angle_speed, full_disk_num_sunspots, full_disk_max_flare_peak,
-                    full_disk_min_temp, full_disk_median_emission_measure, full_disk_median_duration
+                    full_disk_min_temp, full_disk_median_emission_measure, full_disk_median_duration,
+                    full_disk_num_recent_SEPs, full_disk_num_recent_subthreshold_SEPs
                 ]
 
                 overall_blob_data = []
@@ -250,7 +255,7 @@ class SEPInputDataGenerator(tf.keras.utils.Sequence):
                 x_data.append(complete_data_vector)
 
                 # Class label for disk, which is 1 if any of the top 5 blobs produced an SEP event, and 0 otherwise
-                produced_SEP = chosen_blob_df['Produced an SEP'].max()
+                produced_SEP = chosen_blob_df_all_blobs['Produced an SEP'].max()
                 y_data.append(produced_SEP)
 
             return np.array(x_data), np.array(y_data)
