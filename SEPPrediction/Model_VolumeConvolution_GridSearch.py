@@ -1,4 +1,4 @@
-from VolumeNoTimeseriesDataLoader import SEPInputDataGenerator
+from VolumeSlicesAndCubeDataLoader import SEPInputDataGenerator
 from ModelConstructor import ModelConstructor
 import pandas as pd
 import numpy as np
@@ -17,11 +17,12 @@ from imblearn.under_sampling import RandomUnderSampler
 import os
 import random
 from sklearn.utils import shuffle
+import tensorflow as tf
 
-NAME = 'sep_prediction_volume_slices_model'
+NAME = 'sep_prediction_volume_convolution_grid_search'
 
 # Create output directory for results
-RESULTS_DIR = f'results/volume_slices'
+RESULTS_DIR = f'results/volume_convolution'
 os.makedirs(RESULTS_DIR, exist_ok=True)
 
 # Set random seed for reproducibility
@@ -75,7 +76,7 @@ def evaluate_model(y_true, y_pred, y_pred_proba, set_name=""):
     }
 
 def load_data():
-    blob_df_filename = '../OutputData/UnifiedActiveRegionData_with_all_events_including_new_flares_and_TEBBS_fix.csv'
+    blob_df_filename = '../OutputData/UnifiedActiveRegionData_with_updated_SEP_list_but_no_line_count.csv'
     blob_df = pd.read_csv(blob_df_filename)
 
     print(f"Loaded dataset with {len(blob_df)} rows")
@@ -161,10 +162,15 @@ def main():
     X_test = test_df_OG.drop(columns=['Produced an SEP', 'Number of SEPs Produced'])
     y_test = test_df_OG['Produced an SEP']
 
+    # granularities = ['per-blob', 'per-disk-4hr', 'per-disk-1d']
+    granularities = ['per-disk-1d']
+
     oversampling_ratios = [0.65] # [0.1, 0.25, 0.5, 0.65, 0.75, 1] # pos:neg ratio.
 
     model_types = [
         'conv_nn_on_slices_and_cube',
+        'conv_nn_on_cube',
+        'conv_nn_on_slices',
     ]
     
     # Create a list to store all results
@@ -175,81 +181,109 @@ def main():
         print(f'\nEvaluating model: {model_type}')
         print('-'*50)
 
-        for oversampling_ratio in oversampling_ratios:
+        for granularity in granularities:
             print('\n' + '-'*50)
-            print(f'\nEvaluating oversampling ratio: {oversampling_ratio}')
+            print(f'\nEvaluating granularity: {granularity}')
             print('-'*50)
-        
-            # Apply class balancing to training set
-            print('\nBefore resampling:')
-            print('Train set count:', len(train_df_OG))
-            print('Train set SEP count:', np.sum(y_train_OG))
 
-            # if oversampling ratio is less than or equal to the current ratio, skip
-            if oversampling_ratio <= np.mean(y_train_OG):
-                print(f"Skipping oversampling ratio {oversampling_ratio} as positive class already significant enough.")
-                continue
-            
-            # Over-sample minority class
-            ros = RandomOverSampler(sampling_strategy=oversampling_ratio/2, random_state=42)
-            X_train, y_train = ros.fit_resample(X_train_OG, y_train_OG)
-            
-            # Under-sample majority class
-            rus = RandomUnderSampler(sampling_strategy=oversampling_ratio, random_state=42)
-            X_train, y_train = rus.fit_resample(X_train, y_train)
+            # Can generate right now since they don't depend on oversampling ratio
+            val_generator = SEPInputDataGenerator(val_df_OG, batch_size=32, shuffle=False, granularity=granularity, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
+            test_generator = SEPInputDataGenerator(test_df_OG, batch_size=32, shuffle=False, granularity=granularity, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
 
-            # Reshuffle the data
-            X_train, y_train = shuffle(X_train, y_train, random_state=42)
+            for oversampling_ratio in oversampling_ratios:
+                print('\n' + '-'*50)
+                print(f'\nEvaluating oversampling ratio: {oversampling_ratio}')
+                print('-'*50)
             
-            print('After resampling:')
-            print('Train set count:', len(X_train))
-            print('Train set SEP count:', np.sum(y_train))
-            
-            # Print dataset statistics
-            print('\nDataset Statistics:')
-            print(f'Train set size: {len(X_train)}, SEP events: {np.sum(y_train)} ({np.mean(y_train)*100:.2f}%)')
-            print(f'Validation set size: {len(X_val)}, SEP events: {np.sum(y_val)} ({np.mean(y_val)*100:.2f}%)')
-            print(f'Test set size: {len(X_test)}, SEP events: {np.sum(y_test)} ({np.mean(y_test)*100:.2f}%)')
-            print(f'Number of features: {X_train.shape[1]}')
+                # Apply class balancing to training set
+                print('\nBefore resampling:')
+                print('Train set count:', len(train_df_OG))
+                print('Train set SEP count:', np.sum(y_train_OG))
 
+                # if oversampling ratio is less than or equal to the current ratio, skip
+                if oversampling_ratio <= np.mean(y_train_OG):
+                    print(f"Skipping oversampling ratio {oversampling_ratio} as positive class already significant enough.")
+                    continue
+                
+                # Over-sample minority class
+                ros = RandomOverSampler(sampling_strategy=oversampling_ratio/2, random_state=42)
+                X_train, y_train = ros.fit_resample(X_train_OG, y_train_OG)
+                
+                # Under-sample majority class
+                rus = RandomUnderSampler(sampling_strategy=oversampling_ratio, random_state=42)
+                X_train, y_train = rus.fit_resample(X_train, y_train)
 
-            # TODO: Create data loader from oversampled data
+                # Reshuffle the data
+                X_train, y_train = shuffle(X_train, y_train, random_state=42)
+                
+                print('After resampling:')
+                print('Train set count:', len(X_train))
+                print('Train set SEP count:', np.sum(y_train))
+                
+                # Print dataset statistics
+                print('\nDataset Statistics:')
+                print(f'Train set size: {len(X_train)}, SEP events: {np.sum(y_train)} ({np.mean(y_train)*100:.2f}%)')
+                print(f'Validation set size: {len(X_val)}, SEP events: {np.sum(y_val)} ({np.mean(y_val)*100:.2f}%)')
+                print(f'Test set size: {len(X_test)}, SEP events: {np.sum(y_test)} ({np.mean(y_test)*100:.2f}%)')
+                print(f'Number of features: {X_train.shape[1]}')
 
-            # time model loading
-            model = ModelConstructor.create_model('volume', model_type)
-            
-            # time model training
-            train_start = time.time()
-            model.fit(X_train, y_train)
-            train_end = time.time()
-            print(f'Model trained in {train_end - train_start:.2f} seconds')
-            
-            # Make predictions
-            y_pred_proba = model.predict(X_val)
-            # Assume 0.5 threshold for now, prob need to optimize over too
-            y_pred = (y_pred_proba > 0.5).astype(int)
-            
-            # Calculate metrics
-            metrics = evaluate_model(y_val, y_pred, y_pred_proba, "Validation")
-            
-            # Extract metrics to store in results list
-            # TODO: Update this and later with all selected hyperparameters
-            result_row = {
-                'oversampling_ratio': oversampling_ratio,
-                'model_type': model_type,
-                'model': model,
-                'accuracy': metrics['accuracy'],
-                'precision': metrics['precision'],
-                'recall': metrics['recall'],
-                'f1': metrics['f1'],
-                'auc': metrics['auc']
-            }
-            
-            all_results.append(result_row)
+                # TODO: Create data loader from oversampled data
+                train_df = pd.concat([X_train, y_train], axis=1)
+                train_generator = SEPInputDataGenerator(train_df, batch_size=32, shuffle=False, granularity=granularity, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
 
-            # Save current state of all_results
-            results_df = pd.DataFrame(all_results)
-            results_df.to_csv(f'{RESULTS_DIR}/{NAME}_all_results_so_far.csv', index=False)
+                # time model loading
+                model = ModelConstructor.create_model('slices_and_cube', model_type, granularity=granularity, n_components=-1)
+
+                # Define some callbacks to improve training.
+                early_stopping = tf.keras.callbacks.EarlyStopping(monitor="val_loss", patience=10)
+                reduce_lr = tf.keras.callbacks.ReduceLROnPlateau(monitor="val_loss", patience=5)
+                checkpoint_best_every_50 = tf.keras.callbacks.ModelCheckpoint(
+                    f"{NAME}_checkpoint_best_every_50.keras",
+                    save_best_only=True,
+                    save_freq=50, # save every 50 batches
+                )
+                checkpoint_every_50 = tf.keras.callbacks.ModelCheckpoint(
+                    f"{NAME}_checkpoint_every_50.keras",
+                    save_best_only=False,
+                    save_freq=50, # save every 50 batches
+                )
+                
+                # time model training
+                train_start = time.time()
+                # model.fit(X_train, y_train)
+
+                model.fit(train_generator, epochs=10, validation_data=val_generator,
+                            callbacks=[early_stopping, reduce_lr, checkpoint_best_every_50, checkpoint_every_50])
+
+                train_end = time.time()
+                print(f'Model trained in {train_end - train_start:.2f} seconds')
+                
+                # Make predictions
+                y_pred_proba = model.predict(X_val)
+                # Assume 0.5 threshold for now, prob need to optimize over too
+                y_pred = (y_pred_proba > 0.5).astype(int)
+                
+                # Calculate metrics
+                metrics = evaluate_model(y_val, y_pred, y_pred_proba, "Validation")
+                
+                # Extract metrics to store in results list
+                # TODO: Update this and later with all selected hyperparameters
+                result_row = {
+                    'oversampling_ratio': oversampling_ratio,
+                    'model_type': model_type,
+                    'model': model,
+                    'accuracy': metrics['accuracy'],
+                    'precision': metrics['precision'],
+                    'recall': metrics['recall'],
+                    'f1': metrics['f1'],
+                    'auc': metrics['auc']
+                }
+                
+                all_results.append(result_row)
+
+                # Save current state of all_results
+                results_df = pd.DataFrame(all_results)
+                results_df.to_csv(f'{RESULTS_DIR}/{NAME}_all_results_so_far.csv', index=False)
     
     # Convert results to DataFrame
     results_df = pd.DataFrame(all_results)
