@@ -65,6 +65,14 @@ def generate_slices_and_cubes(volume_dir):
 
             curr_blob = blobs_resized[curr_blob_index - 1]
 
+            planes_xy_path = os.path.join(OUTPUT_PATH, filename_general + '_blob' + str(curr_blob_index) + '_planes_xy.npy')
+            planes_xz_path = os.path.join(OUTPUT_PATH, filename_general + '_blob' + str(curr_blob_index) + '_planes_xz.npy')
+            planes_yz_path = os.path.join(OUTPUT_PATH, filename_general + '_blob' + str(curr_blob_index) + '_planes_yz.npy')
+            cube_path = os.path.join(OUTPUT_PATH, filename_general + '_blob' + str(curr_blob_index) + '_cube.npy')
+
+            if os.path.exists(planes_xy_path) and os.path.exists(planes_xz_path) and os.path.exists(planes_yz_path) and os.path.exists(cube_path):
+                continue
+
             # Create a new volume for the blob. That is, mask out ~blob pixels at every height of the volume, which is in the resized scale.
             mask = labeled_resized == curr_blob
 
@@ -87,11 +95,6 @@ def generate_slices_and_cubes(volume_dir):
             planes_xy, planes_xz, planes_yz, cube = get_region_of_interest_planes_and_cube(bitmap, bx_3D_blob, by_3D_blob, bz_3D_blob)
 
             # Save the planes and cube
-            planes_xy_path = os.path.join(OUTPUT_PATH, filename_general + '_blob' + str(curr_blob_index) + '_planes_xy.npy')
-            planes_xz_path = os.path.join(OUTPUT_PATH, filename_general + '_blob' + str(curr_blob_index) + '_planes_xz.npy')
-            planes_yz_path = os.path.join(OUTPUT_PATH, filename_general + '_blob' + str(curr_blob_index) + '_planes_yz.npy')
-            cube_path = os.path.join(OUTPUT_PATH, filename_general + '_blob' + str(curr_blob_index) + '_cube.npy')
-
             np.save(planes_xy_path, planes_xy)
             np.save(planes_xz_path, planes_xz)
             np.save(planes_yz_path, planes_yz)
