@@ -50,21 +50,26 @@ def get_point_of_interest(bz_3D):
     bz_surf_positive[bz_surf_positive < 0] = 0
 
     if np.sum(bz_surf_positive) == 0:
-        print('All pixels are quiet sun')
+        print('No positive-weighted pixels')
         return bz_surf_positive.shape[0] // 2, bz_surf_positive.shape[1] // 2
 
-    centroid_row, centroid_col = ndimage.center_of_mass(bz_surf_positive)
-    centroid_row, centroid_col = round(centroid_row), round(centroid_col)
+    centroid_row_pos, centroid_col_pos = ndimage.center_of_mass(bz_surf_positive)
+    centroid_row_pos, centroid_col_pos = round(centroid_row_pos), round(centroid_col_pos)
 
     # Find the negative-weighted centroid of the layer
     bz_surf_negative = np.copy(bz_surf_without_noise)
     bz_surf_negative[bz_surf_negative > 0] = 0
+
+    if np.sum(bz_surf_negative) == 0:
+        print('No negative-weighted pixels')
+        return bz_surf_negative.shape[0] // 2, bz_surf_negative.shape[1] // 2
+
     centroid_row_neg, centroid_col_neg = ndimage.center_of_mass(bz_surf_negative)
     centroid_row_neg, centroid_col_neg = round(centroid_row_neg), round(centroid_col_neg)
 
     # Find the center point of the line connecting the two centroids
-    center_row = (centroid_row + centroid_row_neg) // 2
-    center_col = (centroid_col + centroid_col_neg) // 2
+    center_row = (centroid_row_pos + centroid_row_neg) // 2
+    center_col = (centroid_col_pos + centroid_col_neg) // 2
 
     # # Plot the Bz map along with the centroids, a line connecting them, and a point
     # # at the center of that line.
