@@ -220,10 +220,13 @@ def get_region_of_interest_planes_and_cube(associated_SunPy_map, bx_3D, by_3D, b
 
 if __name__ == "__main__":
     pass
-    # bx_3D, by_3D, bz_3D = load_volume_components('D:\Downloads\Bout_hmi.sharp_cea_720s.7115.20170903_050000_TAI.bin')
-    # brMapLocation = 'D:\MagPy\Input Data\Test Data\HMI\Definitive SHARPs\hmi.sharp_cea_720s.7115.20170905_013600_TAI.Br.fits'
-    # region_of_interest = get_region_of_interest_volume(brMapLocation, bx_3D, by_3D, bz_3D)
-    # get_region_of_interest_planes_and_cube(brMapLocation, bx_3D, by_3D, bz_3D)
+
+    # bx_3D, by_3D, bz_3D = load_volume_components('C:Users/ibfernan/Downloads/Bout_hmi.sharp_cea_720s.7115.20170903_050000_TAI.bin')
+    # brMapLocation = 'C:/Users/ibfernan/MagPy/Input Data/Test Data/HMI/Definitive SHARPs/hmi.sharp_cea_720s.7115.20170905_013600_TAI.Br.fits'
+    # map = sunpy.map.Map(brMapLocation)
+    # # region_of_interest = get_region_of_interest_volume(map, bx_3D, by_3D, bz_3D)
+    # planes_xy, planes_xz, planes_yz, cube = get_region_of_interest_planes_and_cube(map, bx_3D, by_3D, bz_3D)
+
     # print(region_of_interest.shape)
     # # plot bottom layer of Bz
     # plt.imshow(region_of_interest[:, :, 0, 2], cmap='gray')
