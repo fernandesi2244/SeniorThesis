@@ -98,8 +98,8 @@ def main():
     maxIndex = len(volumes) - 1
     workerscriptLocation = os.path.join(rootDir, 'VolumeParameterization', 'parameterizationWorkerscript.sh')
 
-    # Schedule job array to process each targetARGen. Allow only 250 jobs to run at a time to avoid overuse of cluster resources.
-    os.system(f'sbatch --partition=full --mem-per-cpu=10G --array=0-{maxIndex}%250 "{workerscriptLocation}"') # should be roughly 250 jobs at a time
+    # Schedule job array to process each targetARGen. Allow only 150 jobs to run at a time to avoid overuse of cluster resources.
+    os.system(f'sbatch --partition=full --mem-per-cpu=10G --array=0-{maxIndex}%150 "{workerscriptLocation}"') # should be roughly 250 jobs at a time
 
     logger.log('Volume parameterization job scheduling complete.', 'LOW')
 
