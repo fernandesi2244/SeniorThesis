@@ -101,10 +101,10 @@ def generate_slices_and_cubes(volume_dir):
             np.save(cube_path, cube)
 
 
-print('Generating slices and cubes for volumes in ' + GENERATED_VOLUMES_PATH_SINGLE_BLOB)
-generate_slices_and_cubes(GENERATED_VOLUMES_PATH_SINGLE_BLOB)
-
 print('Generating slices and cubes for volumes in ' + GENERATED_VOLUMES_PATH_MULTI_BLOB)
 generate_slices_and_cubes(GENERATED_VOLUMES_PATH_MULTI_BLOB)
+
+print('Generating slices and cubes for volumes in ' + GENERATED_VOLUMES_PATH_SINGLE_BLOB)
+generate_slices_and_cubes(GENERATED_VOLUMES_PATH_SINGLE_BLOB)
 
 print('Finished generating slices and cubes for all volumes.')
