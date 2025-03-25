@@ -3,7 +3,7 @@ import numpy as np
 import tensorflow as tf
 
 
-loaded_model = tf.keras.models.load_model('next_frame_prediction_2.keras')
+loaded_model = tf.keras.models.load_model('next_frame_prediction_final.keras')
 
 # Print the model architecture
 print(loaded_model.summary())
@@ -15,3 +15,4 @@ for layer in loaded_model.layers:
         print(f"Kernel Size: {layer.kernel_size}")
         print(f"Filters: {layer.filters}")
         print(f"Strides: {layer.strides}")
+        print(f"Activation: {layer.activation}")

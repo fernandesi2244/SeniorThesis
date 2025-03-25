@@ -4,15 +4,17 @@ import os
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import ConvLSTM2D, BatchNormalization
+from tensorflow.keras.layers import ConvLSTM2D, BatchNormalization, TimeDistributed, Conv2D, LeakyReLU
 from sklearn.model_selection import train_test_split
-
+from scipy.ndimage import gaussian_filter
+import multiprocessing
+from sklearn.model_selection import train_test_split
+import keras
+import time
 from skimage.metrics import structural_similarity as ssim
 from skimage.metrics import peak_signal_noise_ratio as psnr
 
 from skimage.transform import resize
-
-FIX SCRIPT BASED ON RECENT CHANGES
 
 import keras
 import sys
@@ -28,14 +30,20 @@ GLOBAL_MAX = 2500
 # predict the next frame at the next hour.
 
 def correct_nans(image):
-        image[np.isnan(image)] = 0
-        return image
+    image[np.isnan(image)] = 0
+    return image
 
 def normalize(image):
     return (image - GLOBAL_MIN) / (GLOBAL_MAX - GLOBAL_MIN)
 
+def apply_gaussian_filter(image):
+    bitmap = gaussian_filter(abs(image), 48, order=0) > 32
+    return image * bitmap
+
 class ImageSequenceGenerator(tf.keras.utils.Sequence):
-    def __init__(self, filepaths, sequence_length, batch_size, target_size):
+    def __init__(self, filepaths, sequence_length, batch_size, target_size, **kwargs):
+        super().__init__(**kwargs)  # For multiprocessing parameters
+
         self.sequence_length = sequence_length # using sequence_length images to predict the next one
         self.batch_size = batch_size
         self.target_size = target_size
@@ -56,8 +64,8 @@ class ImageSequenceGenerator(tf.keras.utils.Sequence):
         for i in range(0, self.batch_size):
             sequence_files = batch_filepaths[i:i+self.sequence_length]
             label_file = batch_filepaths[i+self.sequence_length]
-            sequence_data = [np.expand_dims(normalize(correct_nans(np.load(file))), axis=-1) for file in sequence_files]
-            label_data = np.expand_dims(normalize(correct_nans(np.load(label_file))), axis=-1)
+            sequence_data = [np.expand_dims(normalize(apply_gaussian_filter(correct_nans(np.load(file)))), axis=-1) for file in sequence_files]
+            label_data = np.expand_dims(normalize(apply_gaussian_filter(correct_nans(np.load(label_file)))), axis=-1)
             batch_data.append(sequence_data)
             batch_labels.append(label_data)
         return np.array(batch_data), np.array(batch_labels)
@@ -66,23 +74,26 @@ class ImageSequenceGenerator(tf.keras.utils.Sequence):
         pass
 
 
-directory = 'npy_files_compressed_/LOSFullDiskMagnetogramNPYFiles'
+directory = '/share/development/data/drms/MagPy_Shared_Data/LOSFullDiskMagnetogramNPYFiles512'
 sequence_length = 10  # Number of frames in each sequence
 batch_size = 5
-target_size = (256, 256)  # Adjust based on your dataset
+target_size = (512, 512)  # Adjust based on your dataset
 
 filepaths = os.listdir(directory)
 filepaths = [os.path.join(directory, filepath) for filepath in filepaths]
 filepaths.sort()
-filepaths = filepaths[::8] # Was this used to train the most basic model? TODO: Increase the distance between the files to allow for lower-shot extrapolation.
+filepaths = filepaths[::4] # Was this used to train the most basic model? TODO: Increase the distance between the files to allow for lower-shot extrapolation.
+
+cpus_to_use = max(int(multiprocessing.cpu_count() * 0.9), 1)
+print('Using', cpus_to_use, 'CPUs.')
 
 # Split the filepaths into training and test sets, making sure to keep data within each set contiguous
 _, test_filepaths = train_test_split(filepaths, test_size=0.2, shuffle=False)
 
-test_generator = ImageSequenceGenerator(test_filepaths, sequence_length, batch_size, target_size)
+test_generator = ImageSequenceGenerator(test_filepaths, sequence_length, batch_size, target_size, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
 
 # Load the next_frame_prediction_.h5 model
-loaded_model = tf.keras.models.load_model('next_frame_prediction_64_32_16_every_8.keras')
+loaded_model = tf.keras.models.load_model('next_frame_prediction_final.keras')
 
 # Mask out the values that are not the solar disk
 width = 4096
@@ -112,6 +123,15 @@ for i in range(len(test_generator)):
     for j in range(len(predictions)):
         prediction = predictions[j, :, :, 0]
         label = batch_labels[j, :, :, 0]
+
+        # Denoise the images, then use gaussian mask to only consider blobs, then mask out the values that are not the solar disk
+        prediction = prediction.squeeze() * (GLOBAL_MAX - GLOBAL_MIN) + GLOBAL_MIN
+        label = label.squeeze() * (GLOBAL_MAX - GLOBAL_MIN) + GLOBAL_MIN
+
+        prediction = apply_gaussian_filter(prediction)
+        label = apply_gaussian_filter(label)
+
+        # NOTE: I think this should be redundant now that we are using the gaussian mask before this for blob detection
         prediction = prediction * mask
         label = label * mask
 
@@ -141,7 +161,10 @@ plt.title('SSIM values for the test set')
 plt.show()
 
 # Save figure
-plt.savefig('Next Frame Results/ConvLSTM 3 (64-32-16 every 8)/ssim_values.png')
+if not os.path.exists('Next Frame Results/ConvLSTM Final'):
+    os.makedirs('Next Frame Results/ConvLSTM Final')
+
+plt.savefig('Next Frame Results/ConvLSTM Final/ssim_values.png')
 
 plt.figure()
 plt.hist(psnrs, bins=50, alpha=0.5, label='PSNR')
@@ -150,8 +173,8 @@ plt.title('PSNR values for the test set')
 plt.show()
 
 # Save figure
-plt.savefig('Next Frame Results/ConvLSTM 3 (64-32-16 every 8)/psnr_values.png')
+plt.savefig('Next Frame Results/ConvLSTM Final/psnr_values.png')
 
 # Save the SSIM and PSNR values to numpy files
-np.save('Next Frame Results/ConvLSTM 3 (64-32-16 every 8)/ssim_values.npy', ssims)
-np.save('Next Frame Results/ConvLSTM 3 (64-32-16 every 8)/psnr_values.npy', psnrs)
+np.save('Next Frame Results/ConvLSTM Final/ssim_values.npy', ssims)
+np.save('Next Frame Results/ConvLSTM Final/psnr_values.npy', psnrs)
