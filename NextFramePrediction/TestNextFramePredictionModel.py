@@ -34,6 +34,7 @@ def normalize(image):
 
 def apply_gaussian_filter(image):
     bitmap = gaussian_filter(abs(image), 48, order=0) > 32
+    print(np.sum(bitmap.flatten()))
     return image * bitmap
 
 class ImageSequenceGenerator(tf.keras.utils.Sequence):
@@ -86,12 +87,17 @@ print('Using', cpus_to_use, 'CPUs.')
 # Split the filepaths into training and test sets, making sure to keep data within each set contiguous
 _, test_filepaths = train_test_split(filepaths, test_size=0.2, shuffle=False)
 
+test_filepaths = ['hmi.m_720s.20170905_000000_TAI.3.magnetogram.npy', 'hmi.m_720s.20170905_040000_TAI.3.magnetogram.npy', 'hmi.m_720s.20170905_080000_TAI.3.magnetogram.npy']
+
+
 # Save plots of first 5 full-disk images
-for i in range(5):
-    image_filepath = os.path.join(directory, filepaths[i])
+for i in range(3):
+    image_filepath = os.path.join(directory, test_filepaths[i])
+    print('Filepath:', image_filepath)
     image = np.load(image_filepath)
-    modified_image = normalize(apply_gaussian_filter(correct_nans(image)))
-    plt.imshow(modified_image, cmap='gray', vmin=0, vmax=1)
+    image = np.nan_to_num(image)
+    modified_image = apply_gaussian_filter(image)
+    plt.imshow(modified_image, cmap='gray', vmin=-300, vmax=300)
     plt.axis('off')
     plt.savefig(f'Next Frame Results/ConvLSTM Final/full_disk_image_modified_{i}.png')
     plt.clf()
