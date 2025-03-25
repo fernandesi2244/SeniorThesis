@@ -86,6 +86,26 @@ print('Using', cpus_to_use, 'CPUs.')
 # Split the filepaths into training and test sets, making sure to keep data within each set contiguous
 _, test_filepaths = train_test_split(filepaths, test_size=0.2, shuffle=False)
 
+# Save plots of first 5 full-disk images
+for i in range(5):
+    image_filepath = os.path.join(directory, filepaths[i])
+    image = np.load(image_filepath)
+    modified_image = normalize(apply_gaussian_filter(correct_nans(image)))
+    plt.imshow(modified_image, cmap='gray', vmin=0, vmax=1)
+    plt.axis('off')
+    plt.savefig(f'Next Frame Results/ConvLSTM Final/full_disk_image_modified_{i}.png')
+    plt.clf()
+    plt.close()
+
+    plt.imshow(image, cmap='gray', vmin=-300, vmax=300)
+    plt.axis('off')
+    plt.savefig(f'Next Frame Results/ConvLSTM Final/full_disk_image_original_{i}.png')
+    plt.clf()
+    plt.close()
+
+exit()
+
+
 test_generator = ImageSequenceGenerator(test_filepaths, sequence_length, batch_size, target_size, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
 
 # Load the next_frame_prediction_.h5 model
@@ -120,8 +140,8 @@ def plot_sequence_and_predicted_frame(batch, labels, predicted_frames, batch_num
         frame_denormalized = np.fliplr(frame_denormalized)
         axes[i].imshow(frame_denormalized, cmap='gray', vmin=-300, vmax=300)
         # Draw dotted gridlines over the plot so we can see the spatial resolution
-        axes[i].set_xticks(np.arange(0, 256, 25), minor=True)
-        axes[i].set_yticks(np.arange(0, 256, 25), minor=True)
+        axes[i].set_xticks(np.arange(0, 512, 25), minor=True)
+        axes[i].set_yticks(np.arange(0, 512, 25), minor=True)
         axes[i].grid(which='both', color='w', linestyle=':', linewidth=0.2)
         axes[i].set_title(f'Frame {i + 1}')
 
@@ -129,8 +149,8 @@ def plot_sequence_and_predicted_frame(batch, labels, predicted_frames, batch_num
     predicted_frame_denormalized[~mask] = np.nan
     predicted_frame_denormalized = np.fliplr(predicted_frame_denormalized)
     axes[sequence_length].imshow(predicted_frame_denormalized, cmap='gray', vmin=-300, vmax=300)
-    axes[sequence_length].set_xticks(np.arange(0, 256, 25), minor=True)
-    axes[sequence_length].set_yticks(np.arange(0, 256, 25), minor=True)
+    axes[sequence_length].set_xticks(np.arange(0, 512, 25), minor=True)
+    axes[sequence_length].set_yticks(np.arange(0, 512, 25), minor=True)
     axes[sequence_length].grid(which='both', color='w', linestyle=':', linewidth=0.2)
     axes[sequence_length].set_title('Predicted Frame')
 
@@ -138,8 +158,8 @@ def plot_sequence_and_predicted_frame(batch, labels, predicted_frames, batch_num
     difference[~mask] = np.nan
     difference = np.fliplr(difference)
     im = axes[sequence_length + 1].imshow(difference, cmap='RdBu')
-    axes[sequence_length + 1].set_xticks(np.arange(0, 256, 25), minor=True)
-    axes[sequence_length + 1].set_yticks(np.arange(0, 256, 25), minor=True)
+    axes[sequence_length + 1].set_xticks(np.arange(0, 512, 25), minor=True)
+    axes[sequence_length + 1].set_yticks(np.arange(0, 512, 25), minor=True)
     axes[sequence_length + 1].grid(which='both', color='w', linestyle=':', linewidth=0.2)
     axes[sequence_length + 1].set_title('Predicted - Actual')
 
