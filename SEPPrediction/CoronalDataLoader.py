@@ -271,7 +271,7 @@ class SEPInputDataGenerator(tf.keras.utils.Sequence):
                     continue
 
                 # Get the NOAA AR numbers of the blobs on the disk at the current time
-                associated_ARs = chosen_blob_df_all_blobs['Most Probable AR Number'].values
+                associated_ARs = chosen_blob_df_all_blobs['Most Probable AR Num'].values
                 # add 1 day to the current date and then set the time to 00:00:00
                 date_plus_one_day = dt + datetime.timedelta(days=1)
                 datetime_plus_one_day = datetime.datetime.combine(date_plus_one_day, datetime.datetime.min.time())
