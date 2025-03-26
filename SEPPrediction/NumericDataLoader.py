@@ -12,6 +12,7 @@ from scipy.ndimage import label, generate_binary_structure
 from sklearn.preprocessing import StandardScaler
 import time
 import multiprocessing
+import datetime
 
 rootDir = pathlib.Path(__file__).resolve().parent.parent.absolute()
 sys.path.insert(1, os.path.join(rootDir))
@@ -67,6 +68,12 @@ class SEPInputDataGenerator(tf.keras.utils.Sequence):
 
         if self.shuffle:
             np.random.shuffle(self.indexes)
+        
+        # Load SEP (CSV), flare (JSON) and CME (JSON) data
+        self.SEPs = pd.read_csv('../InputData/SPEs_with_types.csv')
+
+        # Ignore any SEPs rows that don't have an 'endTime'
+        self.SEPs = self.SEPs.dropna(subset=['endTime'])
 
     def __len__(self):
         return len(self.indexes) // self.batch_size
@@ -253,8 +260,31 @@ class SEPInputDataGenerator(tf.keras.utils.Sequence):
 
                 x_data.append(complete_data_vector)
 
-                # Class label for disk, which is 1 if any of the top 5 blobs produced an SEP event, and 0 otherwise
-                produced_SEP = chosen_blob_df_all_blobs['Produced an SEP'].max()
+                # Class label for disk, which is 1 if any of the blobs at that time produced an SEP event, and 0 otherwise.
+                # However, we actually need to first get the NOAA AR numbers of the blobs on the disk at the current time
+                # and then check if any SEPs are associated with that time (not the time of the blobs).
+                
+                # Although in the per-disk-4hr case, all blobs are at same time so old method still works.
+                if self.granularity == 'per-disk-4hr':
+                    produced_SEP = chosen_blob_df_all_blobs['Produced an SEP'].max()
+                    y_data.append(produced_SEP)
+                    continue
+
+                # Get the NOAA AR numbers of the blobs on the disk at the current time
+                associated_ARs = chosen_blob_df_all_blobs['Most Probable AR Number'].values
+                # add 1 day to the current date and then set the time to 00:00:00
+                date_plus_one_day = dt + datetime.timedelta(days=1)
+                datetime_plus_one_day = datetime.datetime.combine(date_plus_one_day, datetime.datetime.min.time())
+
+                SEPs_in_range = self.SEPs[
+                    (self.SEPs['endTime'].apply(self.toDatetime) >= datetime_plus_one_day) &
+                    (self.SEPs['beginTime'].apply(self.toDatetime) <= datetime_plus_one_day + datetime.timedelta(days=1))
+                ]
+                relevant_SEPs = SEPs_in_range[
+                    (SEPs_in_range['activeRegionNum'].apply(self.toIntString).isin(associated_ARs)) &
+                    (SEPs_in_range['P10OnsetMax'] >= 10)
+                ]
+                produced_SEP = int(not relevant_SEPs.empty)
                 y_data.append(produced_SEP)
 
             return np.array(x_data), np.array(y_data)
@@ -262,3 +292,10 @@ class SEPInputDataGenerator(tf.keras.utils.Sequence):
     def on_epoch_end(self):
         if self.shuffle:
             np.random.shuffle(self.indexes)
+    
+    def toDatetime(self, date):
+        return datetime.datetime.strptime(date.strip(), '%Y-%m-%dT%H:%MZ')
+    
+    # Active region numbers in JSON files automatically get converted to floats.
+    def toIntString(self, floatNum):
+        return str(int(floatNum))
