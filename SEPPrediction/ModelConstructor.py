@@ -62,11 +62,11 @@ class ModelConstructor(object):
         elif dataloader_type == 'numeric':
             dataloader = NumericDataLoader.SEPInputDataGenerator
         elif dataloader_type == 'slices_and_cube':
-            dataloader = VolumeSlicesAndCubeDataLoader.SEPInputDataGenerator
+            dataloader = VolumeSlicesAndCubeDataLoader.SecondarySEPInputDataGenerator
         elif dataloader_type == 'cube':
-            dataloader = VolumeCubeDataLoader.SEPInputDataGenerator
+            dataloader = VolumeCubeDataLoader.SecondarySEPInputDataGenerator
         elif dataloader_type == 'slices':
-            dataloader = VolumeSlicesDataLoader.SEPInputDataGenerator
+            dataloader = VolumeSlicesDataLoader.SecondarySEPInputDataGenerator
         else:
             raise ValueError('Invalid dataloader type')
 
