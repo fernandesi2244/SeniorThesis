@@ -734,7 +734,7 @@ class ModelConstructor(object):
                 # # For Conv2D, we need to merge the first two dimensions or select a single slice dimension
                 # xy_slices = tf.keras.layers.Reshape((-1, nx, ny, channels))(xy_slices)
                 # just take the middle slice
-                xy_slices = tf.keras.layers.Lambda(lambda x: x[:, 2, :, :, :])(xy_slices)
+                xy_slices = tf.keras.layers.Lambda(lambda x: x[:, 2, :, :, :], output_shape=(nx, ny, channels))(xy_slices)
 
                 xz_slices = []
                 for curr_slice in range(5):
@@ -749,7 +749,7 @@ class ModelConstructor(object):
                 # # For Conv2D, we need to merge the first two dimensions or select a single slice dimension
                 # xz_slices = tf.keras.layers.Reshape((-1, nx, nz, channels))(xz_slices)
                 # just take the middle slice
-                xz_slices = tf.keras.layers.Lambda(lambda x: x[:, 2, :, :, :])(xz_slices)
+                xz_slices = tf.keras.layers.Lambda(lambda x: x[:, 2, :, :, :], output_shape=(nx, nz, channels))(xz_slices)
 
                 yz_slices = []
                 for curr_slice in range(5):
@@ -764,7 +764,7 @@ class ModelConstructor(object):
                 # # For Conv2D, we need to merge the first two dimensions or select a single slice dimension
                 # yz_slices = tf.keras.layers.Reshape((-1, ny, nz, channels))(yz_slices)
                 # just take the middle slice
-                yz_slices = tf.keras.layers.Lambda(lambda x: x[:, 2, :, :, :])(yz_slices)
+                yz_slices = tf.keras.layers.Lambda(lambda x: x[:, 2, :, :, :], output_shape=(ny, nz, channels))(yz_slices)
 
                 # Reform cube
                 cube_start = start_idx + len(dataloader.BLOB_VECTOR_COLUMNS_GENERAL) + 5 * nx * ny * channels + 5 * nx * nz * channels + 5 * ny * nz * channels
@@ -1026,7 +1026,7 @@ class ModelConstructor(object):
                 # # For Conv2D, we need to merge the first two dimensions or select a single slice dimension
                 # xy_slices = tf.keras.layers.Reshape((-1, nx, ny, channels))(xy_slices)
                 # just take the middle slice
-                xy_slices = tf.keras.layers.Lambda(lambda x: x[:, 2, :, :, :])(xy_slices)
+                xy_slices = tf.keras.layers.Lambda(lambda x: x[:, 2, :, :, :], output_shape=(nx, ny, channels))(xy_slices)
 
                 xz_slices = []
                 for curr_slice in range(5):
@@ -1041,7 +1041,7 @@ class ModelConstructor(object):
                 # # For Conv2D, we need to merge the first two dimensions or select a single slice dimension
                 # xz_slices = tf.keras.layers.Reshape((-1, nx, nz, channels))(xz_slices)
                 # just take the middle slice
-                xz_slices = tf.keras.layers.Lambda(lambda x: x[:, 2, :, :, :])(xz_slices)
+                xz_slices = tf.keras.layers.Lambda(lambda x: x[:, 2, :, :, :], output_shape=(nx, nz, channels))(xz_slices)
 
                 yz_slices = []
                 for curr_slice in range(5):
@@ -1056,7 +1056,7 @@ class ModelConstructor(object):
                 # # For Conv2D, we need to merge the first two dimensions or select a single slice dimension
                 # yz_slices = tf.keras.layers.Reshape((-1, ny, nz, channels))(yz_slices)
                 # just take the middle slice
-                yz_slices = tf.keras.layers.Lambda(lambda x: x[:, 2, :, :, :])(yz_slices)
+                yz_slices = tf.keras.layers.Lambda(lambda x: x[:, 2, :, :, :], output_shape=(ny, nz, channels))(yz_slices)
 
                 # Process curr blob general info, bringing it down to 2 neurons
                 curr_blob_general_info_output = tf.keras.layers.Dense(2, activation='relu')(curr_blob_general_info)
