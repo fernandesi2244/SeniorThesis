@@ -729,6 +729,10 @@ class ModelConstructor(object):
                 # Stack the xy slices together so we can convolve across all at the same time
                 # xy_slices = tf.stack(xy_slices, axis=1) # axis 1 assuming first axis is batch size
                 xy_slices = StackLayer(axis=1)(xy_slices)
+                # Reshape to (batch_size, 5, nx, ny, channels) and then reshape for Conv2D
+                xy_slices = tf.keras.layers.Reshape((-1, 5, nx, ny, channels))(xy_slices)
+                # For Conv2D, we need to merge the first two dimensions or select a single slice dimension
+                xy_slices = tf.keras.layers.Reshape((-1, nx, ny, channels))(xy_slices)
 
                 xz_slices = []
                 for curr_slice in range(5):
@@ -738,6 +742,10 @@ class ModelConstructor(object):
                     xz_slices.append(xz_slice)
                 # xz_slices = tf.stack(xz_slices, axis=1)
                 xz_slices = StackLayer(axis=1)(xz_slices)
+                # Reshape to (batch_size, 5, nx, ny, channels) and then reshape for Conv2D
+                xz_slices = tf.keras.layers.Reshape((-1, 5, nx, nz, channels))(xz_slices)
+                # For Conv2D, we need to merge the first two dimensions or select a single slice dimension
+                xz_slices = tf.keras.layers.Reshape((-1, nx, nz, channels))(xz_slices)
 
                 yz_slices = []
                 for curr_slice in range(5):
@@ -747,6 +755,10 @@ class ModelConstructor(object):
                     yz_slices.append(yz_slice)
                 # yz_slices = tf.stack(yz_slices, axis=1)
                 yz_slices = StackLayer(axis=1)(yz_slices)
+                # Reshape to (batch_size, 5, nx, ny, channels) and then reshape for Conv2D
+                yz_slices = tf.keras.layers.Reshape((-1, 5, ny, nz, channels))(yz_slices)
+                # For Conv2D, we need to merge the first two dimensions or select a single slice dimension
+                yz_slices = tf.keras.layers.Reshape((-1, ny, nz, channels))(yz_slices)
 
                 # Reform cube
                 cube_start = start_idx + len(dataloader.BLOB_VECTOR_COLUMNS_GENERAL) + 5 * nx * ny * channels + 5 * nx * nz * channels + 5 * ny * nz * channels
@@ -1003,6 +1015,10 @@ class ModelConstructor(object):
                 # Stack the xy slices together so we can convolve across all at the same time
                 # xy_slices = tf.stack(xy_slices, axis=1) # axis 1 assuming first axis is batch size
                 xy_slices = StackLayer(axis=1)(xy_slices)
+                # Reshape to (batch_size, 5, nx, ny, channels) and then reshape for Conv2D
+                xy_slices = tf.keras.layers.Reshape((-1, 5, nx, ny, channels))(xy_slices)
+                # For Conv2D, we need to merge the first two dimensions or select a single slice dimension
+                xy_slices = tf.keras.layers.Reshape((-1, nx, ny, channels))(xy_slices)
 
                 xz_slices = []
                 for curr_slice in range(5):
@@ -1012,6 +1028,10 @@ class ModelConstructor(object):
                     xz_slices.append(xz_slice)
                 # xz_slices = tf.stack(xz_slices, axis=1)
                 xz_slices = StackLayer(axis=1)(xz_slices)
+                # Reshape to (batch_size, 5, nx, ny, channels) and then reshape for Conv2D
+                xz_slices = tf.keras.layers.Reshape((-1, 5, nx, nz, channels))(xz_slices)
+                # For Conv2D, we need to merge the first two dimensions or select a single slice dimension
+                xz_slices = tf.keras.layers.Reshape((-1, nx, nz, channels))(xz_slices)
 
                 yz_slices = []
                 for curr_slice in range(5):
@@ -1021,6 +1041,10 @@ class ModelConstructor(object):
                     yz_slices.append(yz_slice)
                 # yz_slices = tf.stack(yz_slices, axis=1)
                 yz_slices = StackLayer(axis=1)(yz_slices)
+                # Reshape to (batch_size, 5, nx, ny, channels) and then reshape for Conv2D
+                yz_slices = tf.keras.layers.Reshape((-1, 5, ny, nz, channels))(yz_slices)
+                # For Conv2D, we need to merge the first two dimensions or select a single slice dimension
+                yz_slices = tf.keras.layers.Reshape((-1, ny, nz, channels))(yz_slices)
 
                 # Process curr blob general info, bringing it down to 2 neurons
                 curr_blob_general_info_output = tf.keras.layers.Dense(2, activation='relu')(curr_blob_general_info)
