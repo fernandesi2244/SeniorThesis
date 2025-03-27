@@ -630,6 +630,13 @@ class ModelConstructor(object):
             raise ValueError('Convolutional models are not yet supported for per-blob granularity')
         
         # NOTE: From now on, assuming per-disk. Moreover, both options (1d vs 4hr) are treated equally
+        class StackLayer(tf.keras.layers.Layer):
+            def __init__(self, axis=1, **kwargs):
+                super(StackLayer, self).__init__(**kwargs)
+                self.axis = axis
+                
+            def call(self, inputs):
+                return tf.stack(inputs, axis=self.axis)
         
         if version == 'slices_and_cube':
             """
@@ -720,7 +727,8 @@ class ModelConstructor(object):
                     xy_slice = tf.keras.layers.Lambda(lambda x: x[:, slice_j_start:slice_j_end])(blob_data_input)
                     xy_slices.append(xy_slice)
                 # Stack the xy slices together so we can convolve across all at the same time
-                xy_slices = tf.stack(xy_slices, axis=1) # axis 1 assuming first axis is batch size
+                # xy_slices = tf.stack(xy_slices, axis=1) # axis 1 assuming first axis is batch size
+                xy_slices = StackLayer(axis=1)(xy_slices)
 
                 xz_slices = []
                 for curr_slice in range(5):
@@ -728,7 +736,8 @@ class ModelConstructor(object):
                     slice_j_end = slice_j_start + nx * nz * channels
                     xz_slice = tf.keras.layers.Lambda(lambda x: x[:, slice_j_start:slice_j_end])(blob_data_input)
                     xz_slices.append(xz_slice)
-                xz_slices = tf.stack(xz_slices, axis=1)
+                # xz_slices = tf.stack(xz_slices, axis=1)
+                xz_slices = StackLayer(axis=1)(xz_slices)
 
                 yz_slices = []
                 for curr_slice in range(5):
@@ -736,7 +745,8 @@ class ModelConstructor(object):
                     slice_j_end = slice_j_start + ny * nz * channels
                     yz_slice = tf.keras.layers.Lambda(lambda x: x[:, slice_j_start:slice_j_end])(blob_data_input)
                     yz_slices.append(yz_slice)
-                yz_slices = tf.stack(yz_slices, axis=1)
+                # yz_slices = tf.stack(yz_slices, axis=1)
+                yz_slices = StackLayer(axis=1)(yz_slices)
 
                 # Reform cube
                 cube_start = start_idx + len(dataloader.BLOB_VECTOR_COLUMNS_GENERAL) + 5 * nx * ny * channels + 5 * nx * nz * channels + 5 * ny * nz * channels
@@ -991,7 +1001,8 @@ class ModelConstructor(object):
                     xy_slice = tf.keras.layers.Lambda(lambda x: x[:, slice_j_start:slice_j_end])(blob_data_input)
                     xy_slices.append(xy_slice)
                 # Stack the xy slices together so we can convolve across all at the same time
-                xy_slices = tf.stack(xy_slices, axis=1) # axis 1 assuming first axis is batch size
+                # xy_slices = tf.stack(xy_slices, axis=1) # axis 1 assuming first axis is batch size
+                xy_slices = StackLayer(axis=1)(xy_slices)
 
                 xz_slices = []
                 for curr_slice in range(5):
@@ -999,7 +1010,8 @@ class ModelConstructor(object):
                     slice_j_end = slice_j_start + nx * nz * channels
                     xz_slice = tf.keras.layers.Lambda(lambda x: x[:, slice_j_start:slice_j_end])(blob_data_input)
                     xz_slices.append(xz_slice)
-                xz_slices = tf.stack(xz_slices, axis=1)
+                # xz_slices = tf.stack(xz_slices, axis=1)
+                xz_slices = StackLayer(axis=1)(xz_slices)
 
                 yz_slices = []
                 for curr_slice in range(5):
@@ -1007,7 +1019,8 @@ class ModelConstructor(object):
                     slice_j_end = slice_j_start + ny * nz * channels
                     yz_slice = tf.keras.layers.Lambda(lambda x: x[:, slice_j_start:slice_j_end])(blob_data_input)
                     yz_slices.append(yz_slice)
-                yz_slices = tf.stack(yz_slices, axis=1)
+                # yz_slices = tf.stack(yz_slices, axis=1)
+                yz_slices = StackLayer(axis=1)(yz_slices)
 
                 # Process curr blob general info, bringing it down to 2 neurons
                 curr_blob_general_info_output = tf.keras.layers.Dense(2, activation='relu')(curr_blob_general_info)
