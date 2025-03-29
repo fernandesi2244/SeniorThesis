@@ -720,85 +720,99 @@ class ModelConstructor(object):
 
                 curr_blob_general_info = tf.keras.layers.Lambda(lambda x: x[:, start_idx:start_idx + len(dataloader.BLOB_VECTOR_COLUMNS_GENERAL)])(blob_data_input)
 
-                xy_slices = []
+                # Process curr blob general info, bringing it down to 2 neurons
+                curr_blob_general_info_output = tf.keras.layers.Dense(2, activation='relu')(curr_blob_general_info)
+                curr_blob_general_info_output = tf.keras.layers.BatchNormalization()(curr_blob_general_info_output)
+
+                # Process xy slices - Apply the same 2D convolution to each slice
+                # Create shared convolutional layers for xy slices
+                xy_conv_layer = tf.keras.layers.Conv2D(32, (3, 3), activation='relu')
+                xy_bn_layer = tf.keras.layers.BatchNormalization()
+                xy_pooling_layer = tf.keras.layers.MaxPooling2D((2, 2))
+                
+                xy_outputs = []
                 for curr_slice in range(5):
                     slice_j_start = start_idx + len(dataloader.BLOB_VECTOR_COLUMNS_GENERAL) + curr_slice * nx * ny * channels
                     slice_j_end = slice_j_start + nx * ny * channels
                     xy_slice = tf.keras.layers.Lambda(lambda x: x[:, slice_j_start:slice_j_end])(blob_data_input)
-                    xy_slices.append(xy_slice)
-                # Stack the xy slices together so we can convolve across all at the same time
-                # xy_slices = tf.stack(xy_slices, axis=1) # axis 1 assuming first axis is batch size
-                xy_slices = StackLayer(axis=1)(xy_slices)
-                # Reshape to (batch_size, 5, nx, ny, channels) and then reshape for Conv2D
-                xy_slices = tf.keras.layers.Reshape((-1, 5, nx, ny, channels))(xy_slices)
-                # # For Conv2D, we need to merge the first two dimensions or select a single slice dimension
-                # xy_slices = tf.keras.layers.Reshape((-1, nx, ny, channels))(xy_slices)
-                # just take the middle slice
-                xy_slices = tf.keras.layers.Lambda(lambda x: x[:, 2, :, :, :], output_shape=(nx, ny, channels))(xy_slices)
+                    
+                    # Reshape for Conv2D
+                    xy_slice = tf.keras.layers.Reshape((nx, ny, channels))(xy_slice)
+                    
+                    # Apply shared convolution
+                    xy_slice_output = xy_conv_layer(xy_slice)
+                    xy_slice_output = xy_bn_layer(xy_slice_output)
+                    xy_slice_output = xy_pooling_layer(xy_slice_output)
+                    xy_slice_output = tf.keras.layers.Flatten()(xy_slice_output)
+                    
+                    xy_outputs.append(xy_slice_output)
+                
+                # Take elementwise max across all xy slice outputs
+                xy_output = tf.keras.layers.Maximum()(xy_outputs)
+                xy_output = tf.keras.layers.Dense(16, activation='relu')(xy_output)
+                xy_output = tf.keras.layers.BatchNormalization()(xy_output)
 
-                xz_slices = []
+                # Process xz slices - Apply the same 2D convolution to each slice
+                # Create shared convolutional layers for xz slices
+                xz_conv_layer = tf.keras.layers.Conv2D(32, (3, 3), activation='relu')
+                xz_bn_layer = tf.keras.layers.BatchNormalization()
+                xz_pooling_layer = tf.keras.layers.MaxPooling2D((2, 2))
+                
+                xz_outputs = []
                 for curr_slice in range(5):
                     slice_j_start = start_idx + len(dataloader.BLOB_VECTOR_COLUMNS_GENERAL) + 5 * nx * ny * channels + curr_slice * nx * nz * channels
                     slice_j_end = slice_j_start + nx * nz * channels
                     xz_slice = tf.keras.layers.Lambda(lambda x: x[:, slice_j_start:slice_j_end])(blob_data_input)
-                    xz_slices.append(xz_slice)
-                # xz_slices = tf.stack(xz_slices, axis=1)
-                xz_slices = StackLayer(axis=1)(xz_slices)
-                # Reshape to (batch_size, 5, nx, ny, channels) and then reshape for Conv2D
-                xz_slices = tf.keras.layers.Reshape((-1, 5, nx, nz, channels))(xz_slices)
-                # # For Conv2D, we need to merge the first two dimensions or select a single slice dimension
-                # xz_slices = tf.keras.layers.Reshape((-1, nx, nz, channels))(xz_slices)
-                # just take the middle slice
-                xz_slices = tf.keras.layers.Lambda(lambda x: x[:, 2, :, :, :], output_shape=(nx, nz, channels))(xz_slices)
+                    
+                    # Reshape for Conv2D
+                    xz_slice = tf.keras.layers.Reshape((nx, nz, channels))(xz_slice)
+                    
+                    # Apply shared convolution
+                    xz_slice_output = xz_conv_layer(xz_slice)
+                    xz_slice_output = xz_bn_layer(xz_slice_output)
+                    xz_slice_output = xz_pooling_layer(xz_slice_output)
+                    xz_slice_output = tf.keras.layers.Flatten()(xz_slice_output)
+                    
+                    xz_outputs.append(xz_slice_output)
+                
+                # Take elementwise max across all xz slice outputs
+                xz_output = tf.keras.layers.Maximum()(xz_outputs)
+                xz_output = tf.keras.layers.Dense(16, activation='relu')(xz_output)
+                xz_output = tf.keras.layers.BatchNormalization()(xz_output)
 
-                yz_slices = []
+                # Process yz slices - Apply the same 2D convolution to each slice
+                # Create shared convolutional layers for yz slices
+                yz_conv_layer = tf.keras.layers.Conv2D(32, (3, 3), activation='relu')
+                yz_bn_layer = tf.keras.layers.BatchNormalization()
+                yz_pooling_layer = tf.keras.layers.MaxPooling2D((2, 2))
+                
+                yz_outputs = []
                 for curr_slice in range(5):
                     slice_j_start = start_idx + len(dataloader.BLOB_VECTOR_COLUMNS_GENERAL) + 5 * nx * ny * channels + 5 * nx * nz * channels + curr_slice * ny * nz * channels
                     slice_j_end = slice_j_start + ny * nz * channels
                     yz_slice = tf.keras.layers.Lambda(lambda x: x[:, slice_j_start:slice_j_end])(blob_data_input)
-                    yz_slices.append(yz_slice)
-                # yz_slices = tf.stack(yz_slices, axis=1)
-                yz_slices = StackLayer(axis=1)(yz_slices)
-                # Reshape to (batch_size, 5, nx, ny, channels) and then reshape for Conv2D
-                yz_slices = tf.keras.layers.Reshape((-1, 5, ny, nz, channels))(yz_slices)
-                # # For Conv2D, we need to merge the first two dimensions or select a single slice dimension
-                # yz_slices = tf.keras.layers.Reshape((-1, ny, nz, channels))(yz_slices)
-                # just take the middle slice
-                yz_slices = tf.keras.layers.Lambda(lambda x: x[:, 2, :, :, :], output_shape=(ny, nz, channels))(yz_slices)
+                    
+                    # Reshape for Conv2D
+                    yz_slice = tf.keras.layers.Reshape((ny, nz, channels))(yz_slice)
+                    
+                    # Apply shared convolution
+                    yz_slice_output = yz_conv_layer(yz_slice)
+                    yz_slice_output = yz_bn_layer(yz_slice_output)
+                    yz_slice_output = yz_pooling_layer(yz_slice_output)
+                    yz_slice_output = tf.keras.layers.Flatten()(yz_slice_output)
+                    
+                    yz_outputs.append(yz_slice_output)
+                
+                # Take elementwise max across all yz slice outputs
+                yz_output = tf.keras.layers.Maximum()(yz_outputs)
+                yz_output = tf.keras.layers.Dense(16, activation='relu')(yz_output)
+                yz_output = tf.keras.layers.BatchNormalization()(yz_output)
 
                 # Reform cube
                 cube_start = start_idx + len(dataloader.BLOB_VECTOR_COLUMNS_GENERAL) + 5 * nx * ny * channels + 5 * nx * nz * channels + 5 * ny * nz * channels
                 cube_end = cube_start + 5 * 5 * 5 * channels
                 # Reshape the cube to 5x5x5
                 cube = tf.keras.layers.Lambda(lambda x: tf.reshape(x, (-1, 5, 5, 5, channels)))(tf.keras.layers.Lambda(lambda x: x[:, cube_start:cube_end])(blob_data_input))
-
-                # Process curr blob general info, bringing it down to 2 neurons
-                curr_blob_general_info_output = tf.keras.layers.Dense(2, activation='relu')(curr_blob_general_info)
-                curr_blob_general_info_output = tf.keras.layers.BatchNormalization()(curr_blob_general_info_output)
-
-                # Process xy slices
-                xy_output = tf.keras.layers.Conv2D(32, (3, 3), activation='relu')(xy_slices)
-                xy_output = tf.keras.layers.BatchNormalization()(xy_output)
-                xy_output = tf.keras.layers.MaxPooling2D((2, 2))(xy_output)
-                xy_output = tf.keras.layers.Flatten()(xy_output)
-                xy_output = tf.keras.layers.Dense(16, activation='relu')(xy_output)
-                xy_output = tf.keras.layers.BatchNormalization()(xy_output)
-
-                # Process xz slices
-                xz_output = tf.keras.layers.Conv2D(32, (3, 3), activation='relu')(xz_slices)
-                xz_output = tf.keras.layers.BatchNormalization()(xz_output)
-                xz_output = tf.keras.layers.MaxPooling2D((2, 2))(xz_output)
-                xz_output = tf.keras.layers.Flatten()(xz_output)
-                xz_output = tf.keras.layers.Dense(16, activation='relu')(xz_output)
-                xz_output = tf.keras.layers.BatchNormalization()(xz_output)
-
-                # Process yz slices
-                yz_output = tf.keras.layers.Conv2D(32, (3, 3), activation='relu')(yz_slices)
-                yz_output = tf.keras.layers.BatchNormalization()(yz_output)
-                yz_output = tf.keras.layers.MaxPooling2D((2, 2))(yz_output)
-                yz_output = tf.keras.layers.Flatten()(yz_output)
-                yz_output = tf.keras.layers.Dense(16, activation='relu')(yz_output)
-                yz_output = tf.keras.layers.BatchNormalization()(yz_output)
 
                 # Process cube
                 cube_output = tf.keras.layers.Conv3D(32, (3, 3, 3), activation='relu')(cube)
@@ -854,7 +868,9 @@ class ModelConstructor(object):
             """
             nx, ny, nz, channels = 200, 400, 100, 3
 
-            complete_input_size = len(dataloader.BLOB_ONE_TIME_INFO) + dataloader.TOP_N_BLOBS * 5 * 5 * 5 * channels
+            complete_input_size = len(dataloader.BLOB_ONE_TIME_INFO) + dataloader.TOP_N_BLOBS * (
+                len(dataloader.BLOB_VECTOR_COLUMNS_GENERAL) + 5 * 5 * 5 * channels)
+            
             flattened_input = tf.keras.layers.Input(shape=(complete_input_size,))
 
             # Split the input into the two main parts
@@ -897,15 +913,15 @@ class ModelConstructor(object):
 
                 curr_blob_general_info = tf.keras.layers.Lambda(lambda x: x[:, start_idx:start_idx + len(dataloader.BLOB_VECTOR_COLUMNS_GENERAL)])(blob_data_input)
 
+                # Process curr blob general info, bringing it down to 2 neurons
+                curr_blob_general_info_output = tf.keras.layers.Dense(2, activation='relu')(curr_blob_general_info)
+                curr_blob_general_info_output = tf.keras.layers.BatchNormalization()(curr_blob_general_info_output)
+
                 # Reform cube
                 cube_start = start_idx + len(dataloader.BLOB_VECTOR_COLUMNS_GENERAL)
                 cube_end = cube_start + 5 * 5 * 5 * channels
                 # Reshape the cube to 5x5x5
                 cube = tf.keras.layers.Lambda(lambda x: tf.reshape(x, (-1, 5, 5, 5, channels)))(tf.keras.layers.Lambda(lambda x: x[:, cube_start:cube_end])(blob_data_input))
-
-                # Process curr blob general info, bringing it down to 2 neurons
-                curr_blob_general_info_output = tf.keras.layers.Dense(2, activation='relu')(curr_blob_general_info)
-                curr_blob_general_info_output = tf.keras.layers.BatchNormalization()(curr_blob_general_info_output)
 
                 # Process cube
                 cube_output = tf.keras.layers.Conv3D(32, (3, 3, 3), activation='relu')(cube)
@@ -1012,77 +1028,91 @@ class ModelConstructor(object):
 
                 curr_blob_general_info = tf.keras.layers.Lambda(lambda x: x[:, start_idx:start_idx + len(dataloader.BLOB_VECTOR_COLUMNS_GENERAL)])(blob_data_input)
 
-                xy_slices = []
-                for curr_slice in range(5):
-                    slice_j_start = start_idx + len(dataloader.BLOB_VECTOR_COLUMNS_GENERAL) + curr_slice * nx * ny * channels
-                    slice_j_end = slice_j_start + nx * ny * channels
-                    xy_slice = tf.keras.layers.Lambda(lambda x: x[:, slice_j_start:slice_j_end])(blob_data_input)
-                    xy_slices.append(xy_slice)
-                # Stack the xy slices together so we can convolve across all at the same time
-                # xy_slices = tf.stack(xy_slices, axis=1) # axis 1 assuming first axis is batch size
-                xy_slices = StackLayer(axis=1)(xy_slices)
-                # Reshape to (batch_size, 5, nx, ny, channels) and then reshape for Conv2D
-                xy_slices = tf.keras.layers.Reshape((-1, 5, nx, ny, channels))(xy_slices)
-                # # For Conv2D, we need to merge the first two dimensions or select a single slice dimension
-                # xy_slices = tf.keras.layers.Reshape((-1, nx, ny, channels))(xy_slices)
-                # just take the middle slice
-                xy_slices = tf.keras.layers.Lambda(lambda x: x[:, 2, :, :, :], output_shape=(nx, ny, channels))(xy_slices)
-
-                xz_slices = []
-                for curr_slice in range(5):
-                    slice_j_start = start_idx + len(dataloader.BLOB_VECTOR_COLUMNS_GENERAL) + 5 * nx * ny * channels + curr_slice * nx * nz * channels
-                    slice_j_end = slice_j_start + nx * nz * channels
-                    xz_slice = tf.keras.layers.Lambda(lambda x: x[:, slice_j_start:slice_j_end])(blob_data_input)
-                    xz_slices.append(xz_slice)
-                # xz_slices = tf.stack(xz_slices, axis=1)
-                xz_slices = StackLayer(axis=1)(xz_slices)
-                # Reshape to (batch_size, 5, nx, ny, channels) and then reshape for Conv2D
-                xz_slices = tf.keras.layers.Reshape((-1, 5, nx, nz, channels))(xz_slices)
-                # # For Conv2D, we need to merge the first two dimensions or select a single slice dimension
-                # xz_slices = tf.keras.layers.Reshape((-1, nx, nz, channels))(xz_slices)
-                # just take the middle slice
-                xz_slices = tf.keras.layers.Lambda(lambda x: x[:, 2, :, :, :], output_shape=(nx, nz, channels))(xz_slices)
-
-                yz_slices = []
-                for curr_slice in range(5):
-                    slice_j_start = start_idx + len(dataloader.BLOB_VECTOR_COLUMNS_GENERAL) + 5 * nx * ny * channels + 5 * nx * nz * channels + curr_slice * ny * nz * channels
-                    slice_j_end = slice_j_start + ny * nz * channels
-                    yz_slice = tf.keras.layers.Lambda(lambda x: x[:, slice_j_start:slice_j_end])(blob_data_input)
-                    yz_slices.append(yz_slice)
-                # yz_slices = tf.stack(yz_slices, axis=1)
-                yz_slices = StackLayer(axis=1)(yz_slices)
-                # Reshape to (batch_size, 5, nx, ny, channels) and then reshape for Conv2D
-                yz_slices = tf.keras.layers.Reshape((-1, 5, ny, nz, channels))(yz_slices)
-                # # For Conv2D, we need to merge the first two dimensions or select a single slice dimension
-                # yz_slices = tf.keras.layers.Reshape((-1, ny, nz, channels))(yz_slices)
-                # just take the middle slice
-                yz_slices = tf.keras.layers.Lambda(lambda x: x[:, 2, :, :, :], output_shape=(ny, nz, channels))(yz_slices)
-
                 # Process curr blob general info, bringing it down to 2 neurons
                 curr_blob_general_info_output = tf.keras.layers.Dense(2, activation='relu')(curr_blob_general_info)
                 curr_blob_general_info_output = tf.keras.layers.BatchNormalization()(curr_blob_general_info_output)
 
-                # Process xy slices
-                xy_output = tf.keras.layers.Conv2D(32, (3, 3), activation='relu')(xy_slices)
-                xy_output = tf.keras.layers.BatchNormalization()(xy_output)
-                xy_output = tf.keras.layers.MaxPooling2D((2, 2))(xy_output)
-                xy_output = tf.keras.layers.Flatten()(xy_output)
+                # Process xy slices - Apply the same 2D convolution to each slice
+                # Create shared convolutional layers for xy slices
+                xy_conv_layer = tf.keras.layers.Conv2D(32, (3, 3), activation='relu')
+                xy_bn_layer = tf.keras.layers.BatchNormalization()
+                xy_pooling_layer = tf.keras.layers.MaxPooling2D((2, 2))
+                
+                xy_outputs = []
+                for curr_slice in range(5):
+                    slice_j_start = start_idx + len(dataloader.BLOB_VECTOR_COLUMNS_GENERAL) + curr_slice * nx * ny * channels
+                    slice_j_end = slice_j_start + nx * ny * channels
+                    xy_slice = tf.keras.layers.Lambda(lambda x: x[:, slice_j_start:slice_j_end])(blob_data_input)
+                    
+                    # Reshape for Conv2D
+                    xy_slice = tf.keras.layers.Reshape((nx, ny, channels))(xy_slice)
+                    
+                    # Apply shared convolution
+                    xy_slice_output = xy_conv_layer(xy_slice)
+                    xy_slice_output = xy_bn_layer(xy_slice_output)
+                    xy_slice_output = xy_pooling_layer(xy_slice_output)
+                    xy_slice_output = tf.keras.layers.Flatten()(xy_slice_output)
+                    
+                    xy_outputs.append(xy_slice_output)
+                
+                # Take elementwise max across all xy slice outputs
+                xy_output = tf.keras.layers.Maximum()(xy_outputs)
                 xy_output = tf.keras.layers.Dense(16, activation='relu')(xy_output)
                 xy_output = tf.keras.layers.BatchNormalization()(xy_output)
 
-                # Process xz slices
-                xz_output = tf.keras.layers.Conv2D(32, (3, 3), activation='relu')(xz_slices)
-                xz_output = tf.keras.layers.BatchNormalization()(xz_output)
-                xz_output = tf.keras.layers.MaxPooling2D((2, 2))(xz_output)
-                xz_output = tf.keras.layers.Flatten()(xz_output)
+                # Process xz slices - Apply the same 2D convolution to each slice
+                # Create shared convolutional layers for xz slices
+                xz_conv_layer = tf.keras.layers.Conv2D(32, (3, 3), activation='relu')
+                xz_bn_layer = tf.keras.layers.BatchNormalization()
+                xz_pooling_layer = tf.keras.layers.MaxPooling2D((2, 2))
+                
+                xz_outputs = []
+                for curr_slice in range(5):
+                    slice_j_start = start_idx + len(dataloader.BLOB_VECTOR_COLUMNS_GENERAL) + 5 * nx * ny * channels + curr_slice * nx * nz * channels
+                    slice_j_end = slice_j_start + nx * nz * channels
+                    xz_slice = tf.keras.layers.Lambda(lambda x: x[:, slice_j_start:slice_j_end])(blob_data_input)
+                    
+                    # Reshape for Conv2D
+                    xz_slice = tf.keras.layers.Reshape((nx, nz, channels))(xz_slice)
+                    
+                    # Apply shared convolution
+                    xz_slice_output = xz_conv_layer(xz_slice)
+                    xz_slice_output = xz_bn_layer(xz_slice_output)
+                    xz_slice_output = xz_pooling_layer(xz_slice_output)
+                    xz_slice_output = tf.keras.layers.Flatten()(xz_slice_output)
+                    
+                    xz_outputs.append(xz_slice_output)
+                
+                # Take elementwise max across all xz slice outputs
+                xz_output = tf.keras.layers.Maximum()(xz_outputs)
                 xz_output = tf.keras.layers.Dense(16, activation='relu')(xz_output)
                 xz_output = tf.keras.layers.BatchNormalization()(xz_output)
 
-                # Process yz slices
-                yz_output = tf.keras.layers.Conv2D(32, (3, 3), activation='relu')(yz_slices)
-                yz_output = tf.keras.layers.BatchNormalization()(yz_output)
-                yz_output = tf.keras.layers.MaxPooling2D((2, 2))(yz_output)
-                yz_output = tf.keras.layers.Flatten()(yz_output)
+                # Process yz slices - Apply the same 2D convolution to each slice
+                # Create shared convolutional layers for yz slices
+                yz_conv_layer = tf.keras.layers.Conv2D(32, (3, 3), activation='relu')
+                yz_bn_layer = tf.keras.layers.BatchNormalization()
+                yz_pooling_layer = tf.keras.layers.MaxPooling2D((2, 2))
+                
+                yz_outputs = []
+                for curr_slice in range(5):
+                    slice_j_start = start_idx + len(dataloader.BLOB_VECTOR_COLUMNS_GENERAL) + 5 * nx * ny * channels + 5 * nx * nz * channels + curr_slice * ny * nz * channels
+                    slice_j_end = slice_j_start + ny * nz * channels
+                    yz_slice = tf.keras.layers.Lambda(lambda x: x[:, slice_j_start:slice_j_end])(blob_data_input)
+                    
+                    # Reshape for Conv2D
+                    yz_slice = tf.keras.layers.Reshape((ny, nz, channels))(yz_slice)
+                    
+                    # Apply shared convolution
+                    yz_slice_output = yz_conv_layer(yz_slice)
+                    yz_slice_output = yz_bn_layer(yz_slice_output)
+                    yz_slice_output = yz_pooling_layer(yz_slice_output)
+                    yz_slice_output = tf.keras.layers.Flatten()(yz_slice_output)
+                    
+                    yz_outputs.append(yz_slice_output)
+                
+                # Take elementwise max across all yz slice outputs
+                yz_output = tf.keras.layers.Maximum()(yz_outputs)
                 yz_output = tf.keras.layers.Dense(16, activation='relu')(yz_output)
                 yz_output = tf.keras.layers.BatchNormalization()(yz_output)
 
