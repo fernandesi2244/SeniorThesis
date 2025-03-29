@@ -726,7 +726,7 @@ class ModelConstructor(object):
 
                 # Process xy slices - Apply the same 2D convolution to each slice
                 # Create shared convolutional layers for xy slices
-                xy_conv_layer = tf.keras.layers.Conv2D(32, (3, 3), activation='relu')
+                xy_conv_layer = tf.keras.layers.Conv2D(8, (3, 3), activation='relu')
                 xy_bn_layer = tf.keras.layers.BatchNormalization()
                 xy_pooling_layer = tf.keras.layers.MaxPooling2D((2, 2))
                 
@@ -754,7 +754,7 @@ class ModelConstructor(object):
 
                 # Process xz slices - Apply the same 2D convolution to each slice
                 # Create shared convolutional layers for xz slices
-                xz_conv_layer = tf.keras.layers.Conv2D(32, (3, 3), activation='relu')
+                xz_conv_layer = tf.keras.layers.Conv2D(8, (3, 3), activation='relu')
                 xz_bn_layer = tf.keras.layers.BatchNormalization()
                 xz_pooling_layer = tf.keras.layers.MaxPooling2D((2, 2))
                 
@@ -782,7 +782,7 @@ class ModelConstructor(object):
 
                 # Process yz slices - Apply the same 2D convolution to each slice
                 # Create shared convolutional layers for yz slices
-                yz_conv_layer = tf.keras.layers.Conv2D(32, (3, 3), activation='relu')
+                yz_conv_layer = tf.keras.layers.Conv2D(8, (3, 3), activation='relu')
                 yz_bn_layer = tf.keras.layers.BatchNormalization()
                 yz_pooling_layer = tf.keras.layers.MaxPooling2D((2, 2))
                 
@@ -815,11 +815,11 @@ class ModelConstructor(object):
                 cube = tf.keras.layers.Lambda(lambda x: tf.reshape(x, (-1, 5, 5, 5, channels)))(tf.keras.layers.Lambda(lambda x: x[:, cube_start:cube_end])(blob_data_input))
 
                 # Process cube
-                cube_output = tf.keras.layers.Conv3D(32, (3, 3, 3), activation='relu')(cube)
+                cube_output = tf.keras.layers.Conv3D(8, (3, 3, 3), activation='relu')(cube)
                 cube_output = tf.keras.layers.BatchNormalization()(cube_output)
                 cube_output = tf.keras.layers.MaxPooling3D((2, 2, 2))(cube_output)
                 cube_output = tf.keras.layers.Flatten()(cube_output)
-                cube_output = tf.keras.layers.Dense(32, activation='relu')(cube_output)
+                cube_output = tf.keras.layers.Dense(16, activation='relu')(cube_output)
                 cube_output = tf.keras.layers.BatchNormalization()(cube_output)
 
                 # Concatenate all the outputs
@@ -924,11 +924,11 @@ class ModelConstructor(object):
                 cube = tf.keras.layers.Lambda(lambda x: tf.reshape(x, (-1, 5, 5, 5, channels)))(tf.keras.layers.Lambda(lambda x: x[:, cube_start:cube_end])(blob_data_input))
 
                 # Process cube
-                cube_output = tf.keras.layers.Conv3D(32, (3, 3, 3), activation='relu')(cube)
+                cube_output = tf.keras.layers.Conv3D(8, (3, 3, 3), activation='relu')(cube)
                 cube_output = tf.keras.layers.BatchNormalization()(cube_output)
                 cube_output = tf.keras.layers.MaxPooling3D((2, 2, 2))(cube_output)
                 cube_output = tf.keras.layers.Flatten()(cube_output)
-                cube_output = tf.keras.layers.Dense(32, activation='relu')(cube_output)
+                cube_output = tf.keras.layers.Dense(16, activation='relu')(cube_output)
                 cube_output = tf.keras.layers.BatchNormalization()(cube_output)
 
                 # Concatenate all the outputs
@@ -1034,7 +1034,8 @@ class ModelConstructor(object):
 
                 # Process xy slices - Apply the same 2D convolution to each slice
                 # Create shared convolutional layers for xy slices
-                xy_conv_layer = tf.keras.layers.Conv2D(32, (3, 3), activation='relu')
+                # REDUCED FROM 32 to 8 filters to match the slices_and_cube version
+                xy_conv_layer = tf.keras.layers.Conv2D(8, (3, 3), activation='relu')
                 xy_bn_layer = tf.keras.layers.BatchNormalization()
                 xy_pooling_layer = tf.keras.layers.MaxPooling2D((2, 2))
                 
@@ -1062,7 +1063,8 @@ class ModelConstructor(object):
 
                 # Process xz slices - Apply the same 2D convolution to each slice
                 # Create shared convolutional layers for xz slices
-                xz_conv_layer = tf.keras.layers.Conv2D(32, (3, 3), activation='relu')
+                # REDUCED FROM 32 to 8 filters to match the slices_and_cube version
+                xz_conv_layer = tf.keras.layers.Conv2D(8, (3, 3), activation='relu')
                 xz_bn_layer = tf.keras.layers.BatchNormalization()
                 xz_pooling_layer = tf.keras.layers.MaxPooling2D((2, 2))
                 
@@ -1090,7 +1092,8 @@ class ModelConstructor(object):
 
                 # Process yz slices - Apply the same 2D convolution to each slice
                 # Create shared convolutional layers for yz slices
-                yz_conv_layer = tf.keras.layers.Conv2D(32, (3, 3), activation='relu')
+                # REDUCED FROM 32 to 8 filters to match the slices_and_cube version
+                yz_conv_layer = tf.keras.layers.Conv2D(8, (3, 3), activation='relu')
                 yz_bn_layer = tf.keras.layers.BatchNormalization()
                 yz_pooling_layer = tf.keras.layers.MaxPooling2D((2, 2))
                 
