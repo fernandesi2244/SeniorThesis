@@ -45,7 +45,6 @@ class SEPInputDataGenerator(tf.keras.utils.Sequence):
         if self.granularity == 'per-blob':
             self.indexes = np.arange(len(self.blob_df))
         elif self.granularity == 'per-disk-4hr':
-            # Get unique number of 'datetime's (since we're already assuming 4-hr granularity of the blob_df)
             self.unique_datetimes = self.blob_df['datetime'].unique()
             num_unique_datetimes = len(self.unique_datetimes)
             self.indexes = np.arange(num_unique_datetimes)
