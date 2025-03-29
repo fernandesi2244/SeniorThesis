@@ -302,21 +302,21 @@ def main():
             # Load the data
             X_train_OG, y_train_OG, X_val, y_val, X_test, y_test = load_data(granularity)
 
-            # Check for NaN and Inf values
-            print('\nChecking for NaN and Inf values:')
-            print('X_train_OG:', X_train_OG)
-            print('Shape of X_train_OG:', X_train_OG.shape)
-            print('Type of X_train_OG:', type(X_train_OG))
-            print('Shape of y_train_OG:', y_train_OG.shape)
-            print('Type of y_train_OG:', type(y_train_OG))
-            print(f'Train NaN count: {np.isnan(X_train_OG).sum()}, Inf count: {np.isinf(X_train_OG).sum()}')
-            print(f'Val NaN count: {np.isnan(X_val).sum()}, Inf count: {np.isinf(X_val).sum()}')
-            print(f'Test NaN count: {np.isnan(X_test).sum()}, Inf count: {np.isinf(X_test).sum()}')
+            # # Check for NaN and Inf values
+            # print('\nChecking for NaN and Inf values:')
+            # print('X_train_OG:', X_train_OG)
+            # print('Shape of X_train_OG:', X_train_OG.shape)
+            # print('Type of X_train_OG:', type(X_train_OG))
+            # print('Shape of y_train_OG:', y_train_OG.shape)
+            # print('Type of y_train_OG:', type(y_train_OG))
+            # print(f'Train NaN count: {np.isnan(X_train_OG).sum()}, Inf count: {np.isinf(X_train_OG).sum()}')
+            # print(f'Val NaN count: {np.isnan(X_val).sum()}, Inf count: {np.isinf(X_val).sum()}')
+            # print(f'Test NaN count: {np.isnan(X_test).sum()}, Inf count: {np.isinf(X_test).sum()}')
 
-            # Replace any NaN or Inf values with 0. NOTE: This code should never change the data since there are no NaNs.
-            X_train_OG = np.nan_to_num(X_train_OG, nan=0.0, posinf=0.0, neginf=0.0)
-            X_val = np.nan_to_num(X_val, nan=0.0, posinf=0.0, neginf=0.0)
-            X_test = np.nan_to_num(X_test, nan=0.0, posinf=0.0, neginf=0.0)
+            # # Replace any NaN or Inf values with 0. NOTE: This code should never change the data since there are no NaNs.
+            # X_train_OG = np.nan_to_num(X_train_OG, nan=0.0, posinf=0.0, neginf=0.0)
+            # X_val = np.nan_to_num(X_val, nan=0.0, posinf=0.0, neginf=0.0)
+            # X_test = np.nan_to_num(X_test, nan=0.0, posinf=0.0, neginf=0.0)
 
             # Standardize the features
             scaler = StandardScaler()
