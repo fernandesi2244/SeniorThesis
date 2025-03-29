@@ -304,6 +304,11 @@ def main():
 
             # Check for NaN and Inf values
             print('\nChecking for NaN and Inf values:')
+            print('X_train_OG:', X_train_OG)
+            print('Shape of X_train_OG:', X_train_OG.shape)
+            print('Type of X_train_OG:', type(X_train_OG))
+            print('Shape of y_train_OG:', y_train_OG.shape)
+            print('Type of y_train_OG:', type(y_train_OG))
             print(f'Train NaN count: {np.isnan(X_train_OG).sum()}, Inf count: {np.isinf(X_train_OG).sum()}')
             print(f'Val NaN count: {np.isnan(X_val).sum()}, Inf count: {np.isinf(X_val).sum()}')
             print(f'Test NaN count: {np.isnan(X_test).sum()}, Inf count: {np.isinf(X_test).sum()}')
