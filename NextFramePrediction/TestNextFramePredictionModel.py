@@ -4,7 +4,10 @@ import os
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import ConvLSTM2D, BatchNormalization
+from tensorflow.keras.layers import ConvLSTM2D, BatchNormalization, TimeDistributed, Conv2D, LeakyReLU
+from sklearn.model_selection import train_test_split
+from scipy.ndimage import gaussian_filter
+import multiprocessing
 from sklearn.model_selection import train_test_split
 
 from skimage.transform import resize
@@ -23,14 +26,21 @@ GLOBAL_MAX = 2500
 # predict the next frame at the next hour.
 
 def correct_nans(image):
-        image[np.isnan(image)] = 0
-        return image
+    image[np.isnan(image)] = 0
+    return image
 
 def normalize(image):
     return (image - GLOBAL_MIN) / (GLOBAL_MAX - GLOBAL_MIN)
 
+def apply_gaussian_filter(image):
+    bitmap = gaussian_filter(abs(image), 48, order=0) > 32
+    print(np.sum(bitmap.flatten()))
+    return image * bitmap
+
 class ImageSequenceGenerator(tf.keras.utils.Sequence):
-    def __init__(self, filepaths, sequence_length, batch_size, target_size):
+    def __init__(self, filepaths, sequence_length, batch_size, target_size, **kwargs):
+        super().__init__(**kwargs)  # For multiprocessing parameters
+
         self.sequence_length = sequence_length # using sequence_length images to predict the next one
         self.batch_size = batch_size
         self.target_size = target_size
@@ -51,8 +61,8 @@ class ImageSequenceGenerator(tf.keras.utils.Sequence):
         for i in range(0, self.batch_size):
             sequence_files = batch_filepaths[i:i+self.sequence_length]
             label_file = batch_filepaths[i+self.sequence_length]
-            sequence_data = [np.expand_dims(normalize(correct_nans(np.load(file))), axis=-1) for file in sequence_files]
-            label_data = np.expand_dims(normalize(correct_nans(np.load(label_file))), axis=-1)
+            sequence_data = [np.expand_dims(normalize(apply_gaussian_filter(correct_nans(np.load(file)))), axis=-1) for file in sequence_files]
+            label_data = np.expand_dims(normalize(apply_gaussian_filter(correct_nans(np.load(label_file)))), axis=-1)
             batch_data.append(sequence_data)
             batch_labels.append(label_data)
         return np.array(batch_data), np.array(batch_labels)
@@ -61,23 +71,51 @@ class ImageSequenceGenerator(tf.keras.utils.Sequence):
         pass
 
 
-directory = 'npy_files_compressed_/LOSFullDiskMagnetogramNPYFiles'
+directory = '/share/development/data/drms/MagPy_Shared_Data/LOSFullDiskMagnetogramNPYFiles512'
 sequence_length = 10  # Number of frames in each sequence
 batch_size = 5
-target_size = (256, 256)  # Adjust based on your dataset
+target_size = (512, 512)  # Adjust based on your dataset
 
 filepaths = os.listdir(directory)
 filepaths = [os.path.join(directory, filepath) for filepath in filepaths]
 filepaths.sort()
-filepaths = filepaths[::8]
+filepaths = filepaths[::4]
+
+cpus_to_use = max(int(multiprocessing.cpu_count() * 0.9), 1)
+print('Using', cpus_to_use, 'CPUs.')
 
 # Split the filepaths into training and test sets, making sure to keep data within each set contiguous
 _, test_filepaths = train_test_split(filepaths, test_size=0.2, shuffle=False)
 
-test_generator = ImageSequenceGenerator(test_filepaths, sequence_length, batch_size, target_size)
+test_filepaths = ['hmi.m_720s.20170905_000000_TAI.3.magnetogram.npy', 'hmi.m_720s.20170905_040000_TAI.3.magnetogram.npy', 'hmi.m_720s.20170905_080000_TAI.3.magnetogram.npy']
+
+
+# Save plots of first 5 full-disk images
+for i in range(3):
+    image_filepath = os.path.join(directory, test_filepaths[i])
+    print('Filepath:', image_filepath)
+    image = np.load(image_filepath)
+    image = np.nan_to_num(image)
+    modified_image = apply_gaussian_filter(image)
+    plt.imshow(modified_image, cmap='gray', vmin=-300, vmax=300)
+    plt.axis('off')
+    plt.savefig(f'Next Frame Results/ConvLSTM Final/full_disk_image_modified_{i}.png')
+    plt.clf()
+    plt.close()
+
+    plt.imshow(image, cmap='gray', vmin=-300, vmax=300)
+    plt.axis('off')
+    plt.savefig(f'Next Frame Results/ConvLSTM Final/full_disk_image_original_{i}.png')
+    plt.clf()
+    plt.close()
+
+exit()
+
+
+test_generator = ImageSequenceGenerator(test_filepaths, sequence_length, batch_size, target_size, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
 
 # Load the next_frame_prediction_.h5 model
-loaded_model = tf.keras.models.load_model('next_frame_prediction_64_32_16_every_8.keras')
+loaded_model = tf.keras.models.load_model('next_frame_prediction_final.keras')
 
 # Mask out the values that are not the solar disk
 width = 4096
@@ -108,8 +146,8 @@ def plot_sequence_and_predicted_frame(batch, labels, predicted_frames, batch_num
         frame_denormalized = np.fliplr(frame_denormalized)
         axes[i].imshow(frame_denormalized, cmap='gray', vmin=-300, vmax=300)
         # Draw dotted gridlines over the plot so we can see the spatial resolution
-        axes[i].set_xticks(np.arange(0, 256, 25), minor=True)
-        axes[i].set_yticks(np.arange(0, 256, 25), minor=True)
+        axes[i].set_xticks(np.arange(0, 512, 25), minor=True)
+        axes[i].set_yticks(np.arange(0, 512, 25), minor=True)
         axes[i].grid(which='both', color='w', linestyle=':', linewidth=0.2)
         axes[i].set_title(f'Frame {i + 1}')
 
@@ -117,8 +155,8 @@ def plot_sequence_and_predicted_frame(batch, labels, predicted_frames, batch_num
     predicted_frame_denormalized[~mask] = np.nan
     predicted_frame_denormalized = np.fliplr(predicted_frame_denormalized)
     axes[sequence_length].imshow(predicted_frame_denormalized, cmap='gray', vmin=-300, vmax=300)
-    axes[sequence_length].set_xticks(np.arange(0, 256, 25), minor=True)
-    axes[sequence_length].set_yticks(np.arange(0, 256, 25), minor=True)
+    axes[sequence_length].set_xticks(np.arange(0, 512, 25), minor=True)
+    axes[sequence_length].set_yticks(np.arange(0, 512, 25), minor=True)
     axes[sequence_length].grid(which='both', color='w', linestyle=':', linewidth=0.2)
     axes[sequence_length].set_title('Predicted Frame')
 
@@ -126,8 +164,8 @@ def plot_sequence_and_predicted_frame(batch, labels, predicted_frames, batch_num
     difference[~mask] = np.nan
     difference = np.fliplr(difference)
     im = axes[sequence_length + 1].imshow(difference, cmap='RdBu')
-    axes[sequence_length + 1].set_xticks(np.arange(0, 256, 25), minor=True)
-    axes[sequence_length + 1].set_yticks(np.arange(0, 256, 25), minor=True)
+    axes[sequence_length + 1].set_xticks(np.arange(0, 512, 25), minor=True)
+    axes[sequence_length + 1].set_yticks(np.arange(0, 512, 25), minor=True)
     axes[sequence_length + 1].grid(which='both', color='w', linestyle=':', linewidth=0.2)
     axes[sequence_length + 1].set_title('Predicted - Actual')
 
@@ -137,7 +175,10 @@ def plot_sequence_and_predicted_frame(batch, labels, predicted_frames, batch_num
 
     plt.tight_layout()
 
-    plt.savefig(f'Next Frame Results/ConvLSTM 3 (64-32-16 every 8)/batch_{batch_num}_sequence_{sequence_num}_and_predicted_frame_and_difference.png')
+    if not os.path.exists('Next Frame Results/ConvLSTM Final'):
+        os.makedirs('Next Frame Results/ConvLSTM Final')
+
+    plt.savefig(f'Next Frame Results/ConvLSTM Final/batch_{batch_num}_sequence_{sequence_num}_and_predicted_frame_and_difference.png')
 
     plt.clf()
     plt.close()

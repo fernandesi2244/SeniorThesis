@@ -12,20 +12,17 @@ from scipy.ndimage import label, generate_binary_structure
 from sklearn.preprocessing import StandardScaler
 import time
 import multiprocessing
+import datetime
 
 rootDir = pathlib.Path(__file__).resolve().parent.parent.absolute()
 sys.path.insert(1, os.path.join(rootDir))
 
-from Utils import load_volume_components
-from Utils import get_region_of_interest_planes_and_cube
-
-GENERATED_VOLUMES_PATH_SINGLE_BLOB = '/mnt/horton_share/development/data/drms/MagPy_Shared_Data/DefinitiveFieldVolumes'
-GENERATED_VOLUMES_PATH_MULTI_BLOB = '/mnt/horton_share/development/data/drms/MagPy_Shared_Data/DefinitiveFieldVolumesMultiblob'
+GENERATED_VOLUME_SLICES_AND_CUBE_PATH = '/mnt/horton_share/development/data/drms/MagPy_Shared_Data/VolumeSlicesAndCubes'
 REGULAR_SHARED_DATA_DIR = os.path.join(os.sep + 'share', 'development', 'data', 'drms', 'MagPy_Shared_Data')
 DEFINITIVE_SHARP_DATA_DIR = os.path.join(REGULAR_SHARED_DATA_DIR, 'TrainingData' + os.sep)
-UNIFIED_DATA_DIR = os.path.join(rootDir, 'OutputData', 'UnifiedActiveRegionData.csv')
 
-class SEPInputDataGenerator(tf.keras.utils.Sequence):
+# Primary is shared by all of [slices and cubes, slices, cubes] since the actual physical volume data is not attached yet (only attached in secondary data loader).
+class PrimarySEPInputDataGenerator(tf.keras.utils.Sequence):
     BLOB_VECTOR_COLUMNS_GENERAL = ['Latitude', 'Carrington Longitude', 'Is Plage', 'Stonyhurst Longitude']
     BLOB_ONE_TIME_INFO = ['Number of Recent Flares', 'Max Class Type of Recent Flares', 'Number of Recent CMEs', 'Max Product of Half Angle and Speed of Recent CMEs', 'Number of Sunspots', 'Max Flare Peak of Recent Flares', 'Min Temperature of Recent Flares', 'Median Emission Measure of Recent Flares', 'Median Duration of Recent Flares', 'Number of Recent SEPs', 'Number of Recent Subthreshold SEPs']
 
@@ -68,6 +65,12 @@ class SEPInputDataGenerator(tf.keras.utils.Sequence):
 
         if self.shuffle:
             np.random.shuffle(self.indexes)
+        
+        # Load SEP (CSV), flare (JSON) and CME (JSON) data
+        self.SEPs = pd.read_csv('../InputData/SPEs_with_types.csv')
+
+        # Ignore any SEPs rows that don't have an 'endTime'
+        self.SEPs = self.SEPs.dropna(subset=['endTime'])
 
     def __len__(self):
         return len(self.indexes) // self.batch_size
@@ -85,82 +88,15 @@ class SEPInputDataGenerator(tf.keras.utils.Sequence):
 
             for _, row in batch_df_rows.iterrows():
                 overall_data_vector = []
-                curr_blob_one_time_info = row[SEPInputDataGenerator.BLOB_ONE_TIME_INFO].values
-                curr_blob_vector = row[SEPInputDataGenerator.BLOB_VECTOR_COLUMNS_GENERAL].values
+                curr_blob_one_time_info = row[PrimarySEPInputDataGenerator.BLOB_ONE_TIME_INFO].values
+                curr_blob_vector = row[PrimarySEPInputDataGenerator.BLOB_VECTOR_COLUMNS_GENERAL].values
 
                 overall_data_vector.extend(curr_blob_one_time_info)
                 overall_data_vector.extend(curr_blob_vector)
 
                 filename_general = row['Filename General']
-
-                # Add selected planes and intersection cube from associated coronal volume.
-                # Bout_hmi.sharp_cea_720s.10960.20240314_170000_TAI.bin
-                volume_path_single_blob = os.path.join(GENERATED_VOLUMES_PATH_SINGLE_BLOB, f'Bout_{filename_general}.bin')
-                volume_path_multi_blob = os.path.join(GENERATED_VOLUMES_PATH_MULTI_BLOB, f'Bout_{filename_general}.bin')
-
-                if os.path.exists(volume_path_single_blob):
-                    bx_3D, by_3D, bz_3D = load_volume_components(volume_path_single_blob)
-                else:
-                    bx_3D, by_3D, bz_3D = load_volume_components(volume_path_multi_blob)
-
-                # Fetch the corresponding bitmap so we an mask the bx, by, and bz fields
-                associated_bitmap_path = os.path.join(DEFINITIVE_SHARP_DATA_DIR, filename_general + '.bitmap.fits')
-                bitmap = sunpy.map.Map(associated_bitmap_path)
-
-                # Resize bitmap data to 200x400
-                bitmap_resized = resize(bitmap.data, (200, 400), anti_aliasing=True, preserve_range=True)
-
-                # weak and strong field pixels within the HARP = (33, 34). A little bit of error allowed here due to
-                # interpolation from resizing function. The next lowest values in the bitmap are low enough that we
-                # can easily look from 30 and up.
-                mask_resized = bitmap_resized > 30
-                blob_mask_resized = bitmap_resized*mask_resized.astype(int)*1.
-
-                # Separate out blobs
-                s = generate_binary_structure(2,2)  # Allows diagonal pixels to be considered part of the same blob
-
-                labeled_resized, nblobs_resized = label(blob_mask_resized, structure=s)
-
-                # Sort blobs in order from greatest area to least area (relevant to AR # identification in MagPy, so needed for cross-referencing)
-                # The assumption is that resizing the bitmap won't change the relative sizes of the blobs to each other.
-                blobs_resized = [i for i in range(1, nblobs_resized+1)]
-                blobs_resized = sorted(blobs_resized, key=lambda x: np.count_nonzero(labeled_resized == x), reverse=True)
-
-                curr_blob_index = row['Blob Index']
-                curr_blob = blobs_resized[curr_blob_index - 1]
-
-                # Create a new volume for the blob. That is, mask out ~blob pixels at every height of the volume, which is in the resized scale.
-                mask = labeled_resized == curr_blob
-
-                # In order to multiply each 3D component by the mask, we need to make the first dimension of the volume the height.
-                # This is because the mask has the same shape as the volume at a given height, and broadcasting only works on the
-                # first dimension.
-                bx_3D_blob = np.transpose(bx_3D, (2, 0, 1)) # height dimension, then number of rows, then number of cols
-                by_3D_blob = np.transpose(by_3D, (2, 0, 1))
-                bz_3D_blob = np.transpose(bz_3D, (2, 0, 1))
-
-                bx_3D_blob = bx_3D_blob * mask
-                by_3D_blob = by_3D_blob * mask
-                bz_3D_blob = bz_3D_blob * mask
-
-                # Transpose back to original shape
-                bx_3D_blob = np.transpose(bx_3D_blob, (1, 2, 0))
-                by_3D_blob = np.transpose(by_3D_blob, (1, 2, 0))
-                bz_3D_blob = np.transpose(bz_3D_blob, (1, 2, 0))
-
-                planes_xy, planes_xz, planes_yz, cube = get_region_of_interest_planes_and_cube(bx_3D_blob, by_3D_blob, bz_3D_blob)
-
-                # Each of planes_{xy, xz, yz} contains 5 2D planes.
-                # The cube contains a 5x5x5 cube.
-                # Flatten each one and add to the overall data vector.
-                for plane in planes_xy:
-                    overall_data_vector.extend(plane.flatten())
-                for plane in planes_xz:
-                    overall_data_vector.extend(plane.flatten())
-                for plane in planes_yz:
-                    overall_data_vector.extend(plane.flatten())
-
-                overall_data_vector.extend(cube.flatten())
+                overall_data_vector.append(filename_general)
+                overall_data_vector.append(row['Blob Index'])
                 
                 # overall_data_vector = np.array(overall_data_vector)
                 overall_data_vector = np.array(overall_data_vector)
@@ -203,7 +139,7 @@ class SEPInputDataGenerator(tf.keras.utils.Sequence):
                 # Sort the blobs in descending order of Phi
                 chosen_blob_df = chosen_blob_df.sort_values(by='Phi', ascending=False)
                 chosen_blob_df_all_blobs = chosen_blob_df.copy()
-                chosen_blob_df = chosen_blob_df.head(SEPInputDataGenerator.TOP_N_BLOBS)
+                chosen_blob_df = chosen_blob_df.head(PrimarySEPInputDataGenerator.TOP_N_BLOBS)
 
                 # take sum of recent flares
                 full_disk_num_recent_flares = chosen_blob_df['Number of Recent Flares'].sum()
@@ -235,95 +171,54 @@ class SEPInputDataGenerator(tf.keras.utils.Sequence):
                 ]
 
                 overall_blob_data = []
+                filename_generals = []
+                blob_indices = []
                 for _, row in chosen_blob_df.iterrows():
-                    curr_blob_vector = row[SEPInputDataGenerator.BLOB_VECTOR_COLUMNS_GENERAL].values
+                    curr_blob_vector = row[PrimarySEPInputDataGenerator.BLOB_VECTOR_COLUMNS_GENERAL].values
 
                     overall_blob_data.extend(curr_blob_vector)
 
                     filename_general = row['Filename General']
-
-                    # Add selected planes and intersection cube from associated coronal volume.
-                    # Bout_hmi.sharp_cea_720s.10960.20240314_170000_TAI.bin
-                    volume_path_single_blob = os.path.join(GENERATED_VOLUMES_PATH_SINGLE_BLOB, f'Bout_{filename_general}.bin')
-                    volume_path_multi_blob = os.path.join(GENERATED_VOLUMES_PATH_MULTI_BLOB, f'Bout_{filename_general}.bin')
-
-                    if os.path.exists(volume_path_single_blob):
-                        bx_3D, by_3D, bz_3D = load_volume_components(volume_path_single_blob)
-                    else:
-                        bx_3D, by_3D, bz_3D = load_volume_components(volume_path_multi_blob)
-
-                    # Fetch the corresponding bitmap so we an mask the bx, by, and bz fields
-                    associated_bitmap_path = os.path.join(DEFINITIVE_SHARP_DATA_DIR, filename_general + '.bitmap.fits')
-                    bitmap = sunpy.map.Map(associated_bitmap_path)
-
-                    # Resize bitmap data to 200x400
-                    bitmap_resized = resize(bitmap.data, (200, 400), anti_aliasing=True, preserve_range=True)
-
-                    # weak and strong field pixels within the HARP = (33, 34). A little bit of error allowed here due to
-                    # interpolation from resizing function. The next lowest values in the bitmap are low enough that we
-                    # can easily look from 30 and up.
-                    mask_resized = bitmap_resized > 30
-                    blob_mask_resized = bitmap_resized*mask_resized.astype(int)*1.
-
-                    # Separate out blobs
-                    s = generate_binary_structure(2,2)  # Allows diagonal pixels to be considered part of the same blob
-
-                    labeled_resized, nblobs_resized = label(blob_mask_resized, structure=s)
-
-                    # Sort blobs in order from greatest area to least area (relevant to AR # identification in MagPy, so needed for cross-referencing)
-                    # The assumption is that resizing the bitmap won't change the relative sizes of the blobs to each other.
-                    blobs_resized = [i for i in range(1, nblobs_resized+1)]
-                    blobs_resized = sorted(blobs_resized, key=lambda x: np.count_nonzero(labeled_resized == x), reverse=True)
-
-                    curr_blob_index = row['Blob Index']
-                    curr_blob = blobs_resized[curr_blob_index - 1]
-
-                    # Create a new volume for the blob. That is, mask out ~blob pixels at every height of the volume, which is in the resized scale.
-                    mask = labeled_resized == curr_blob
-
-                    # In order to multiply each 3D component by the mask, we need to make the first dimension of the volume the height.
-                    # This is because the mask has the same shape as the volume at a given height, and broadcasting only works on the
-                    # first dimension.
-                    bx_3D_blob = np.transpose(bx_3D, (2, 0, 1)) # height dimension, then number of rows, then number of cols
-                    by_3D_blob = np.transpose(by_3D, (2, 0, 1))
-                    bz_3D_blob = np.transpose(bz_3D, (2, 0, 1))
-
-                    bx_3D_blob = bx_3D_blob * mask
-                    by_3D_blob = by_3D_blob * mask
-                    bz_3D_blob = bz_3D_blob * mask
-
-                    # Transpose back to original shape
-                    bx_3D_blob = np.transpose(bx_3D_blob, (1, 2, 0))
-                    by_3D_blob = np.transpose(by_3D_blob, (1, 2, 0))
-                    bz_3D_blob = np.transpose(bz_3D_blob, (1, 2, 0))
-
-                    planes_xy, planes_xz, planes_yz, cube = get_region_of_interest_planes_and_cube(bx_3D_blob, by_3D_blob, bz_3D_blob)
-
-                    # Each of planes_{xy, xz, yz} contains 5 2D planes.
-                    # The cube contains a 5x5x5 cube.
-                    # Flatten each one and add to the overall data vector.
-                    for plane in planes_xy:
-                        overall_blob_data.extend(plane.flatten())
-                    for plane in planes_xz:
-                        overall_blob_data.extend(plane.flatten())
-                    for plane in planes_yz:
-                        overall_blob_data.extend(plane.flatten())
-
-                    overall_blob_data.extend(cube.flatten())
-                
-                nx, ny, nz, channels = 200, 400, 100, 3
+                    filename_generals.append(filename_general)
+                    blob_indices.append(row['Blob Index'])
 
                 # If there were less than 5 blobs, fill in the rest with 0s
-                while len(overall_blob_data) < SEPInputDataGenerator.TOP_N_BLOBS * (len(SEPInputDataGenerator.BLOB_VECTOR_COLUMNS_GENERAL) + (5*nx*ny*channels + 5*nx*nz*channels + 5*ny*nz*channels + 5*5*5*channels)):
-                    overall_blob_data.extend(np.zeros(len(SEPInputDataGenerator.BLOB_VECTOR_COLUMNS_GENERAL) + 5*nx*ny*channels + 5*nx*nz*channels + 5*ny*nz*channels + 5*5*5*channels))
+                while len(overall_blob_data) < PrimarySEPInputDataGenerator.TOP_N_BLOBS * (len(PrimarySEPInputDataGenerator.BLOB_VECTOR_COLUMNS_GENERAL)):
+                    overall_blob_data.extend(np.zeros(len(PrimarySEPInputDataGenerator.BLOB_VECTOR_COLUMNS_GENERAL)))
                 
-                complete_data_vector = full_disk_one_time_info + overall_blob_data
+                filename_generals_str = ','.join(filename_generals)
+                blob_indices_str = ','.join([str(i) for i in blob_indices])
+                complete_data_vector = full_disk_one_time_info + overall_blob_data + [filename_generals_str] + [blob_indices_str]
+
                 complete_data_vector = np.array(complete_data_vector)
 
                 x_data.append(complete_data_vector)
 
-                # Class label for disk, which is 1 if any of the top 5 blobs produced an SEP event, and 0 otherwise
-                produced_SEP = chosen_blob_df_all_blobs['Produced an SEP'].max() # need to look at all blobs since top 5 are just a proxy heuristic
+                # Class label for disk, which is 1 if any of the blobs at that time produced an SEP event, and 0 otherwise.
+                # However, we actually need to first get the NOAA AR numbers of the blobs on the disk at the current time
+                # and then check if any SEPs are associated with that time (not the time of the blobs).
+                
+                # Although in the per-disk-4hr case, all blobs are at same time so old method still works.
+                if self.granularity == 'per-disk-4hr':
+                    produced_SEP = chosen_blob_df_all_blobs['Produced an SEP'].max()
+                    y_data.append(produced_SEP)
+                    continue
+
+                # Get the NOAA AR numbers of the blobs on the disk at the current time
+                associated_ARs = chosen_blob_df_all_blobs['Most Probable AR Num'].values
+                # add 1 day to the current date and then set the time to 00:00:00
+                date_plus_one_day = dt + datetime.timedelta(days=1)
+                datetime_plus_one_day = datetime.datetime.combine(date_plus_one_day, datetime.datetime.min.time())
+
+                SEPs_in_range = self.SEPs[
+                    (self.SEPs['endTime'].apply(self.toDatetime) >= datetime_plus_one_day) &
+                    (self.SEPs['beginTime'].apply(self.toDatetime) <= datetime_plus_one_day + datetime.timedelta(days=1))
+                ]
+                relevant_SEPs = SEPs_in_range[
+                    (SEPs_in_range['activeRegionNum'].apply(self.toIntString).isin(associated_ARs)) &
+                    (SEPs_in_range['P10OnsetMax'] >= 10)
+                ]
+                produced_SEP = int(not relevant_SEPs.empty)
                 y_data.append(produced_SEP)
 
             return np.array(x_data), np.array(y_data)
@@ -331,3 +226,168 @@ class SEPInputDataGenerator(tf.keras.utils.Sequence):
     def on_epoch_end(self):
         if self.shuffle:
             np.random.shuffle(self.indexes)
+
+    def toDatetime(self, date):
+        return datetime.datetime.strptime(date.strip(), '%Y-%m-%dT%H:%MZ')
+    
+    # Active region numbers in JSON files automatically get converted to floats.
+    def toIntString(self, floatNum):
+        return str(int(floatNum))
+
+# The only point of this generator is to add the 2D/3D volume data to the records produced by the above generator.
+class SecondarySEPInputDataGenerator(tf.keras.utils.Sequence):
+    BLOB_VECTOR_COLUMNS_GENERAL = ['Latitude', 'Carrington Longitude', 'Is Plage', 'Stonyhurst Longitude']
+    BLOB_ONE_TIME_INFO = ['Number of Recent Flares', 'Max Class Type of Recent Flares', 'Number of Recent CMEs', 'Max Product of Half Angle and Speed of Recent CMEs', 'Number of Sunspots', 'Max Flare Peak of Recent Flares', 'Min Temperature of Recent Flares', 'Median Emission Measure of Recent Flares', 'Median Duration of Recent Flares', 'Number of Recent SEPs', 'Number of Recent Subthreshold SEPs']
+
+    TOP_N_BLOBS = 5
+
+    def __init__(self, primary_arr, batch_size, shuffle, granularity, **kwargs):
+        super().__init__(**kwargs)  # For multiprocessing parameters
+
+        self.primary_arr = primary_arr
+        self.batch_size = batch_size
+        self.shuffle = shuffle
+        self.granularity = granularity
+
+        self.indexes = np.arange(len(self.primary_arr))
+
+        # Set random seed for comparison purposes since some of the models we're training
+        # will take an extremely long time to train. This will allow us to compare results without
+        # having to average over multiple runs. This is not ideal, but it's a temporary solution until
+        # we are possibly able to distill the models or use a more efficient training mechanism.
+        np.random.seed(42)
+
+        if self.shuffle:
+            np.random.shuffle(self.indexes)
+
+    def __len__(self):
+        return len(self.indexes) // self.batch_size
+
+    # No volume loading so client using this class can probably use large batch size.
+    def __getitem__(self, index):
+        batch_indexes = self.indexes[index * self.batch_size:(index + 1) * self.batch_size]
+
+        if self.granularity == 'per-blob':
+            batch_rows = self.primary_arr[batch_indexes]
+
+            # Iterate over the selected rows and load their corresponding data
+            x_data = []
+            y_data = []
+
+            for row in batch_rows:
+                overall_data_vector = []
+
+                features = row[:-3]
+                filename_general = row[-3]
+                blob_index = row[-2]
+
+                overall_data_vector.extend(features)
+
+                xy_slices_path = os.path.join(GENERATED_VOLUME_SLICES_AND_CUBE_PATH, f'{filename_general}_blob{blob_index}_planes_xy.npy')
+                xz_slices_path = os.path.join(GENERATED_VOLUME_SLICES_AND_CUBE_PATH, f'{filename_general}_blob{blob_index}_planes_xz.npy')
+                yz_slices_path = os.path.join(GENERATED_VOLUME_SLICES_AND_CUBE_PATH, f'{filename_general}_blob{blob_index}_planes_yz.npy')
+                cube_path = os.path.join(GENERATED_VOLUME_SLICES_AND_CUBE_PATH, f'{filename_general}_blob{blob_index}_cube.npy')
+
+                # Load the slices and cube
+                planes_xy = np.load(xy_slices_path)
+                planes_xz = np.load(xz_slices_path)
+                planes_yz = np.load(yz_slices_path)
+                cube = np.load(cube_path)
+
+                # Each of planes_{xy, xz, yz} contains 5 2D planes.
+                # The cube contains a 5x5x5 cube.
+                # Flatten each one and add to the overall data vector.
+                for plane in planes_xy:
+                    overall_data_vector.extend(plane.flatten())
+                for plane in planes_xz:
+                    overall_data_vector.extend(plane.flatten())
+                for plane in planes_yz:
+                    overall_data_vector.extend(plane.flatten())
+
+                overall_data_vector.extend(cube.flatten())
+                
+                # overall_data_vector = np.array(overall_data_vector)
+                overall_data_vector = np.array(overall_data_vector)
+
+                x_data.append(overall_data_vector)
+
+                # Class label for the blob, which is just the SEP event rate for the blob at the current timestep
+                produced_SEP = row[-1]
+                y_data.append(produced_SEP)
+
+            return np.array(x_data), np.array(y_data)
+        
+        # At this point, we're assuming that the granularity is per-disk-4hr or per-disk-1d.
+
+        # Get filename generals of all blobs for the chosen batch indexes.
+        batch_rows = self.primary_arr[batch_indexes]
+        
+        x_data = []
+        y_data = []
+
+        for row in batch_rows:
+
+            overall_data_vector = []
+
+            features = row[:-3]
+            filename_generals_str = row[-3]
+            blob_indices_str = row[-2]
+
+            overall_data_vector.extend(features)
+
+            filename_generals = filename_generals_str.split(',')
+            blob_indices = [int(i) for i in blob_indices_str.split(',')]
+
+            volume_data = []
+
+            for filename_general, blob_index in zip(filename_generals, blob_indices):
+                xy_slices_path = os.path.join(GENERATED_VOLUME_SLICES_AND_CUBE_PATH, f'{filename_general}_blob{blob_index}_planes_xy.npy')
+                xz_slices_path = os.path.join(GENERATED_VOLUME_SLICES_AND_CUBE_PATH, f'{filename_general}_blob{blob_index}_planes_xz.npy')
+                yz_slices_path = os.path.join(GENERATED_VOLUME_SLICES_AND_CUBE_PATH, f'{filename_general}_blob{blob_index}_planes_yz.npy')
+                cube_path = os.path.join(GENERATED_VOLUME_SLICES_AND_CUBE_PATH, f'{filename_general}_blob{blob_index}_cube.npy')
+
+                # Load the slices and cube
+                planes_xy = np.load(xy_slices_path)
+                planes_xz = np.load(xz_slices_path)
+                planes_yz = np.load(yz_slices_path)
+                cube = np.load(cube_path)
+
+                # Each of planes_{xy, xz, yz} contains 5 2D planes.
+                # The cube contains a 5x5x5 cube.
+                # Flatten each one and add to the overall data vector.
+                for plane in planes_xy:
+                    volume_data.extend(plane.flatten())
+                for plane in planes_xz:
+                    volume_data.extend(plane.flatten())
+                for plane in planes_yz:
+                    volume_data.extend(plane.flatten())
+
+                volume_data.extend(cube.flatten())
+            
+
+            nx, ny, nz, channels = 200, 400, 100, 3
+            
+            # If there were less than 5 blobs, fill in the rest with 0s
+            while len(volume_data) < PrimarySEPInputDataGenerator.TOP_N_BLOBS*(5*nx*ny*channels + 5*nx*nz*channels + 5*ny*nz*channels + 5*5*5*channels):
+                volume_data.extend(np.zeros(5*nx*ny*channels + 5*nx*nz*channels + 5*ny*nz*channels + 5*5*5*channels))
+
+            overall_data_vector.extend(volume_data)
+            overall_data_vector = np.array(overall_data_vector)
+
+            x_data.append(overall_data_vector)
+
+            produced_SEP = row[-1]
+            y_data.append(produced_SEP)
+
+        return np.array(x_data), np.array(y_data)
+    
+    def on_epoch_end(self):
+        if self.shuffle:
+            np.random.shuffle(self.indexes)
+
+    def toDatetime(self, date):
+        return datetime.datetime.strptime(date.strip(), '%Y-%m-%dT%H:%MZ')
+    
+    # Active region numbers in JSON files automatically get converted to floats.
+    def toIntString(self, floatNum):
+        return str(int(floatNum))

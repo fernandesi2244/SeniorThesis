@@ -1,4 +1,8 @@
-from VolumeSlicesAndCubeDataLoader import SEPInputDataGenerator
+from VolumeSlicesAndCubeDataLoader import PrimarySEPInputDataGenerator
+from VolumeSlicesAndCubeDataLoader import SecondarySEPInputDataGenerator as SC_SecondarySEPInputDataGenerator
+from VolumeCubeDataLoader import SecondarySEPInputDataGenerator as C_SecondarySEPInputDataGenerator
+from VolumeSlicesDataLoader import SecondarySEPInputDataGenerator as S_SecondarySEPInputDataGenerator
+
 from ModelConstructor import ModelConstructor
 import pandas as pd
 import numpy as np
@@ -19,6 +23,8 @@ import random
 from sklearn.utils import shuffle
 import tensorflow as tf
 
+GENERATED_VOLUME_SLICES_AND_CUBE_PATH = '/mnt/horton_share/development/data/drms/MagPy_Shared_Data/VolumeSlicesAndCubes'
+
 NAME = 'sep_prediction_volume_convolution_grid_search'
 
 # Create output directory for results
@@ -32,6 +38,31 @@ np.random.seed(42)
 # Multiprocessing setup
 cpus_to_use = max(int(multiprocessing.cpu_count() * 0.9), 1)
 print('Using', cpus_to_use, 'CPUs.')
+
+def extract_all_data(generator):
+    """
+    Extract all data from a generator
+    
+    Args:
+        generator: SEPInputDataGenerator instance
+        
+    Returns:
+        X: Features array
+        y: Labels array
+    """
+    all_X = []
+    all_y = []
+    for i in range(len(generator)):
+        if i % 100 == 0:
+            print(f'Extracting batch {i+1} of {len(generator)}...')
+        X_batch, y_batch = generator[i]
+        all_X.append(X_batch)
+        all_y.append(y_batch)
+    
+    if len(all_X) > 0:
+        return np.vstack(all_X), np.concatenate(all_y)
+    else:
+        return np.array([]), np.array([])
 
 def evaluate_model(y_true, y_pred, y_pred_proba, set_name=""):
     """
@@ -75,12 +106,71 @@ def evaluate_model(y_true, y_pred, y_pred_proba, set_name=""):
         'confusion_matrix': cm
     }
 
-def load_data():
+def load_data(granularity):
+    if granularity == 'per-blob':
+        train_features_file = f'{NAME}_X_train_data_per_blob.npy'
+        train_labels_file = f'{NAME}_y_train_data_per_blob.npy'
+        val_features_file = f'{NAME}_val_data_per_blob.npy'
+        val_labels_file = f'{NAME}_val_labels_per_blob.npy'
+        test_features_file = f'{NAME}_test_data_per_blob.npy'
+        test_labels_file = f'{NAME}_test_labels_per_blob.npy'
+    elif granularity == 'per-disk-4hr':
+        train_features_file = f'{NAME}_X_train_data_per_disk_4hr.npy'
+        train_labels_file = f'{NAME}_y_train_data_per_disk_4hr.npy'
+        val_features_file = f'{NAME}_val_data_per_disk_4hr.npy'
+        val_labels_file = f'{NAME}_val_labels_per_disk_4hr.npy'
+        test_features_file = f'{NAME}_test_data_per_disk_4hr.npy'
+        test_labels_file = f'{NAME}_test_labels_per_disk_4hr.npy'
+    elif granularity == 'per-disk-1d':
+        train_features_file = f'{NAME}_X_train_data_per_disk_1d.npy'
+        train_labels_file = f'{NAME}_y_train_data_per_disk_1d.npy'
+        val_features_file = f'{NAME}_val_data_per_disk_1d.npy'
+        val_labels_file = f'{NAME}_val_labels_per_disk_1d.npy'
+        test_features_file = f'{NAME}_test_data_per_disk_1d.npy'
+        test_labels_file = f'{NAME}_test_labels_per_disk_1d.npy'
+    else:
+        raise ValueError(f"Invalid granularity: {granularity}")
+
+    if os.path.exists(test_labels_file):
+        # assuming all files exist if the last-generated one does
+        X_train = np.load(train_features_file)
+        y_train = np.load(train_labels_file)
+        X_val = np.load(val_features_file)
+        y_val = np.load(val_labels_file)
+        X_test = np.load(test_features_file)
+        y_test = np.load(test_labels_file)
+
+        return X_train, y_train, X_val, y_val, X_test, y_test
+
+    # Otherwise, we need to load the data from the original CSV files and preprocess it
     blob_df_filename = '../OutputData/UnifiedActiveRegionData_with_updated_SEP_list_but_no_line_count.csv'
     blob_df = pd.read_csv(blob_df_filename)
 
+    # Go through all the data and make sure slices and cubes exist for all of them. if they don't, exclude
+    # them from the dataset. This is because we can't train on them if they don't exist.
+    rows_to_drop = []
+    for i, row in blob_df.iterrows():
+        filename_general = row['Filename General']
+        blob_index = row['Blob Index']
+
+        xy_slices_path = os.path.join(GENERATED_VOLUME_SLICES_AND_CUBE_PATH, f'{filename_general}_blob{blob_index}_planes_xy.npy')
+        xz_slices_path = os.path.join(GENERATED_VOLUME_SLICES_AND_CUBE_PATH, f'{filename_general}_blob{blob_index}_planes_xz.npy')
+        yz_slices_path = os.path.join(GENERATED_VOLUME_SLICES_AND_CUBE_PATH, f'{filename_general}_blob{blob_index}_planes_yz.npy')
+        cube_path = os.path.join(GENERATED_VOLUME_SLICES_AND_CUBE_PATH, f'{filename_general}_blob{blob_index}_cube.npy')
+
+        if not os.path.exists(xy_slices_path) or not os.path.exists(xz_slices_path) or not os.path.exists(yz_slices_path) or not os.path.exists(cube_path):
+            print(f'Warning: Missing slices or cube for {filename_general} blob {blob_index}. Dropping from dataset.')
+            rows_to_drop.append(i)
+    
+    if len(rows_to_drop) > 0:
+        blob_df.drop(rows_to_drop, inplace=True)
+
+    blob_df.reset_index(drop=True, inplace=True)
+
+    print('Dropped', len(rows_to_drop), 'rows due to missing slices or cube.')
+
     print(f"Loaded dataset with {len(blob_df)} rows")
-        
+
     # Preprocess the data
     blob_df['Produced an SEP'] = (blob_df['Number of SEPs Produced'] > 0) * 1  # 1 if produced, 0 otherwise
     blob_df['Year'] = blob_df['Filename General'].apply(lambda x: x.split('.')[3][0:4])
@@ -145,27 +235,38 @@ def load_data():
         else:
             print(f'Year {year} has insufficient data in one of the sets. Skipping.')
     
-    return train_df, val_df, test_df
+    # Create data generators to get data at right granularity
+    batch_size = 32
+    train_generator = PrimarySEPInputDataGenerator(train_df, batch_size=batch_size, shuffle=False, granularity=granularity, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
+    val_generator = PrimarySEPInputDataGenerator(val_df, batch_size=batch_size, shuffle=False, granularity=granularity, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
+    test_generator = PrimarySEPInputDataGenerator(test_df, batch_size=batch_size, shuffle=False, granularity=granularity, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
+
+    # Extract all data from the generators
+    X_train, y_train = extract_all_data(train_generator)
+    X_val, y_val = extract_all_data(val_generator)
+    X_test, y_test = extract_all_data(test_generator)
+
+    # Save the data for future use
+    np.save(train_features_file, X_train)
+    np.save(train_labels_file, y_train)
+
+    np.save(val_features_file, X_val)
+    np.save(val_labels_file, y_val)
+
+    np.save(test_features_file, X_test)
+    np.save(test_labels_file, y_test)
+
+    return X_train, y_train, X_val, y_val, X_test, y_test
 
 def main():
     """Main function to run the combined feature selection and PCA analysis"""
     start_time = time.time()
-
-    train_df_OG, val_df_OG, test_df_OG = load_data()
-
-    X_train_OG = train_df_OG.drop(columns=['Produced an SEP', 'Number of SEPs Produced'])
-    y_train_OG = train_df_OG['Produced an SEP']
-
-    X_val = val_df_OG.drop(columns=['Produced an SEP', 'Number of SEPs Produced'])
-    y_val = val_df_OG['Produced an SEP']
-
-    X_test = test_df_OG.drop(columns=['Produced an SEP', 'Number of SEPs Produced'])
-    y_test = test_df_OG['Produced an SEP']
+    print(f'Starting analysis for SEP prediction using volume convolution at {time.ctime()}')
 
     # granularities = ['per-blob', 'per-disk-4hr', 'per-disk-1d']
-    granularities = ['per-disk-1d']
+    granularities = ['per-disk-1d', 'per-disk-4hr'] # per-blob not coded in ModelConstructor yet
 
-    oversampling_ratios = [0.65] # [0.1, 0.25, 0.5, 0.65, 0.75, 1] # pos:neg ratio.
+    oversampling_ratios = [-1, 0.65] # [0.1, 0.25, 0.5, 0.65, 0.75, 1] # pos:neg ratio.
 
     model_types = [
         'conv_nn_on_slices_and_cube',
@@ -186,64 +287,117 @@ def main():
             print(f'\nEvaluating granularity: {granularity}')
             print('-'*50)
 
-            # Can generate right now since they don't depend on oversampling ratio
-            val_generator = SEPInputDataGenerator(val_df_OG, batch_size=32, shuffle=False, granularity=granularity, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
-            test_generator = SEPInputDataGenerator(test_df_OG, batch_size=32, shuffle=False, granularity=granularity, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
+            # Load the model
+            if model_type == 'conv_nn_on_slices_and_cube':
+                dataloader_type = 'slices_and_cube'
+            elif model_type == 'conv_nn_on_cube':
+                dataloader_type = 'cube'
+            elif model_type == 'conv_nn_on_slices':
+                dataloader_type = 'slices'
+            else:
+                raise ValueError(f"Invalid model type: {model_type}")
+            
+            model = ModelConstructor.create_model(dataloader_type, model_type, granularity, -1)
+
+            # Load the data
+            X_train_OG, y_train_OG, X_val, y_val, X_test, y_test = load_data(granularity)
+
+            # Check for NaN and Inf values
+            print('\nChecking for NaN and Inf values:')
+            print(f'Train NaN count: {np.isnan(X_train_OG).sum()}, Inf count: {np.isinf(X_train_OG).sum()}')
+            print(f'Val NaN count: {np.isnan(X_val).sum()}, Inf count: {np.isinf(X_val).sum()}')
+            print(f'Test NaN count: {np.isnan(X_test).sum()}, Inf count: {np.isinf(X_test).sum()}')
+
+            # Replace any NaN or Inf values with 0. NOTE: This code should never change the data since there are no NaNs.
+            X_train_OG = np.nan_to_num(X_train_OG, nan=0.0, posinf=0.0, neginf=0.0)
+            X_val = np.nan_to_num(X_val, nan=0.0, posinf=0.0, neginf=0.0)
+            X_test = np.nan_to_num(X_test, nan=0.0, posinf=0.0, neginf=0.0)
+
+            # Standardize the features
+            scaler = StandardScaler()
+            n_columns = X_train_OG.shape[1]
+            columns_to_standardize = list(range(n_columns - 2))  # All columns except the last two (first is either a FilenameGeneral or a list of them depending on the granularity and second is equivalent but for blob index)
+
+            X_train_OG[:, columns_to_standardize] = scaler.fit_transform(X_train_OG[:, columns_to_standardize])
+            X_val[:, columns_to_standardize] = scaler.transform(X_val[:, columns_to_standardize])
+            X_test[:, columns_to_standardize] = scaler.transform(X_test[:, columns_to_standardize])
 
             for oversampling_ratio in oversampling_ratios:
                 print('\n' + '-'*50)
                 print(f'\nEvaluating oversampling ratio: {oversampling_ratio}')
                 print('-'*50)
             
-                # Apply class balancing to training set
-                print('\nBefore resampling:')
-                print('Train set count:', len(train_df_OG))
-                print('Train set SEP count:', np.sum(y_train_OG))
+                if oversampling_ratio != -1:
+                    # Apply class balancing to training set
+                    print('\nBefore resampling:')
+                    print('Train set count:', len(X_train_OG))
+                    print('Train set SEP count:', np.sum(y_train_OG))
 
-                # if oversampling ratio is less than or equal to the current ratio, skip
-                if oversampling_ratio <= np.mean(y_train_OG):
-                    print(f"Skipping oversampling ratio {oversampling_ratio} as positive class already significant enough.")
-                    continue
-                
-                # Over-sample minority class
-                ros = RandomOverSampler(sampling_strategy=oversampling_ratio/2, random_state=42)
-                X_train, y_train = ros.fit_resample(X_train_OG, y_train_OG)
-                
-                # Under-sample majority class
-                rus = RandomUnderSampler(sampling_strategy=oversampling_ratio, random_state=42)
-                X_train, y_train = rus.fit_resample(X_train, y_train)
+                    # if oversampling ratio is less than or equal to the current ratio, skip
+                    if oversampling_ratio <= np.mean(y_train_OG):
+                        print(f"Skipping oversampling ratio {oversampling_ratio} as positive class already significant enough.")
+                        continue
+                    
+                    # Over-sample minority class
+                    ros = RandomOverSampler(sampling_strategy=oversampling_ratio/2, random_state=42)
+                    X_train, y_train = ros.fit_resample(X_train_OG, y_train_OG)
+                    
+                    # Under-sample majority class
+                    rus = RandomUnderSampler(sampling_strategy=oversampling_ratio, random_state=42)
+                    X_train, y_train = rus.fit_resample(X_train, y_train)
 
-                # Reshuffle the data
-                X_train, y_train = shuffle(X_train, y_train, random_state=42)
-                
-                print('After resampling:')
-                print('Train set count:', len(X_train))
-                print('Train set SEP count:', np.sum(y_train))
-                
-                # Print dataset statistics
-                print('\nDataset Statistics:')
-                print(f'Train set size: {len(X_train)}, SEP events: {np.sum(y_train)} ({np.mean(y_train)*100:.2f}%)')
-                print(f'Validation set size: {len(X_val)}, SEP events: {np.sum(y_val)} ({np.mean(y_val)*100:.2f}%)')
-                print(f'Test set size: {len(X_test)}, SEP events: {np.sum(y_test)} ({np.mean(y_test)*100:.2f}%)')
-                print(f'Number of features: {X_train.shape[1]}')
+                    # Reshuffle the data
+                    X_train, y_train = shuffle(X_train, y_train, random_state=42)
+                    
+                    print('After resampling:')
+                    print('Train set count:', len(X_train))
+                    print('Train set SEP count:', np.sum(y_train))
+                    
+                    # Print dataset statistics
+                    print('\nDataset Statistics:')
+                    print(f'Train set size: {len(X_train)}, SEP events: {np.sum(y_train)} ({np.mean(y_train)*100:.2f}%)')
+                    print(f'Validation set size: {len(X_val)}, SEP events: {np.sum(y_val)} ({np.mean(y_val)*100:.2f}%)')
+                    print(f'Test set size: {len(X_test)}, SEP events: {np.sum(y_test)} ({np.mean(y_test)*100:.2f}%)')
+                    print(f'Number of features: {X_train.shape[1]}')
+                else:
+                    print('\nNo resampling but printing stats:')
+                    print('Train set count:', len(X_train_OG))
+                    print('Train set SEP count:', np.sum(y_train_OG))
 
-                # TODO: Create data loader from oversampled data
-                train_df = pd.concat([X_train, y_train], axis=1)
-                train_generator = SEPInputDataGenerator(train_df, batch_size=32, shuffle=False, granularity=granularity, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
+                    X_train = X_train_OG
+                    y_train = y_train_OG
 
-                # time model loading
-                model = ModelConstructor.create_model('slices_and_cube', model_type, granularity=granularity, n_components=-1)
+                    X_train, y_train = shuffle(X_train, y_train, random_state=42)
+
+                train_arr = np.concatenate([X_train, y_train.reshape(-1, 1)], axis=1)
+                val_arr = np.concatenate([X_val, y_val.reshape(-1, 1)], axis=1)
+                test_arr = np.concatenate([X_test, y_test.reshape(-1, 1)], axis=1)
+
+                if model_type == 'conv_nn_on_slices_and_cube':
+                    train_generator = SC_SecondarySEPInputDataGenerator(train_arr, batch_size=32, shuffle=False, granularity=granularity, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
+                    val_generator = SC_SecondarySEPInputDataGenerator(val_arr, batch_size=32, shuffle=False, granularity=granularity, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
+                    test_generator = SC_SecondarySEPInputDataGenerator(test_arr, batch_size=32, shuffle=False, granularity=granularity, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
+                elif model_type == 'conv_nn_on_cube':
+                    train_generator = C_SecondarySEPInputDataGenerator(train_arr, batch_size=32, shuffle=False, granularity=granularity, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
+                    val_generator = C_SecondarySEPInputDataGenerator(val_arr, batch_size=32, shuffle=False, granularity=granularity, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
+                    test_generator = C_SecondarySEPInputDataGenerator(test_arr, batch_size=32, shuffle=False, granularity=granularity, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
+                elif model_type == 'conv_nn_on_slices':
+                    train_generator = S_SecondarySEPInputDataGenerator(train_arr, batch_size=32, shuffle=False, granularity=granularity, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
+                    val_generator = S_SecondarySEPInputDataGenerator(val_arr, batch_size=32, shuffle=False, granularity=granularity, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
+                    test_generator = S_SecondarySEPInputDataGenerator(test_arr, batch_size=32, shuffle=False, granularity=granularity, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
+                else:
+                    raise ValueError(f"Invalid model type: {model_type}")
 
                 # Define some callbacks to improve training.
                 early_stopping = tf.keras.callbacks.EarlyStopping(monitor="val_loss", patience=10)
                 reduce_lr = tf.keras.callbacks.ReduceLROnPlateau(monitor="val_loss", patience=5)
                 checkpoint_best_every_50 = tf.keras.callbacks.ModelCheckpoint(
-                    f"{NAME}_checkpoint_best_every_50.keras",
+                    f"{NAME}_{granularity}_{oversampling_ratio}_{model_type}_checkpoint_best_every_50.keras",
                     save_best_only=True,
                     save_freq=50, # save every 50 batches
                 )
                 checkpoint_every_50 = tf.keras.callbacks.ModelCheckpoint(
-                    f"{NAME}_checkpoint_every_50.keras",
+                    f"{NAME}_{granularity}_{oversampling_ratio}_{model_type}_checkpoint_every_50.keras",
                     save_best_only=False,
                     save_freq=50, # save every 50 batches
                 )
@@ -256,19 +410,20 @@ def main():
                             callbacks=[early_stopping, reduce_lr, checkpoint_best_every_50, checkpoint_every_50])
 
                 train_end = time.time()
-                print(f'Model trained in {train_end - train_start:.2f} seconds')
+                print(f'Model {model_type} trained in {train_end - train_start:.2f} seconds')
                 
                 # Make predictions
-                y_pred_proba = model.predict(X_val)
+                y_pred_proba = model.predict(val_generator)
                 # Assume 0.5 threshold for now, prob need to optimize over too
                 y_pred = (y_pred_proba > 0.5).astype(int)
                 
-                # Calculate metrics
+                # Calculate metrics. NOTE: y_val can be used directly since the generator is deterministic and doesn't shuffle.
                 metrics = evaluate_model(y_val, y_pred, y_pred_proba, "Validation")
                 
                 # Extract metrics to store in results list
                 # TODO: Update this and later with all selected hyperparameters
                 result_row = {
+                    'granularity': granularity,
                     'oversampling_ratio': oversampling_ratio,
                     'model_type': model_type,
                     'model': model,
@@ -276,7 +431,9 @@ def main():
                     'precision': metrics['precision'],
                     'recall': metrics['recall'],
                     'f1': metrics['f1'],
-                    'auc': metrics['auc']
+                    'auc': metrics['auc'],
+                    'test_loader': test_generator,
+                    'test_labels': y_test,
                 }
                 
                 all_results.append(result_row)
@@ -298,6 +455,7 @@ def main():
     print("\nBest Configuration:")
     print(f"Model type: {best_config['model_type']}")
     print(f"Oversampling Ratio: {best_config['oversampling_ratio']}")
+    print(f"Granularity: {best_config['granularity']}")
     print(f"F1 Score: {best_config['f1']:.4f}")
     print(f"Accuracy: {best_config['accuracy']:.4f}")
     print(f"Precision: {best_config['precision']:.4f}")
@@ -308,7 +466,9 @@ def main():
     print("\nEvaluating best model on test set...")
     
     # Make predictions
-    y_test_pred_proba = best_config['model'].predict(X_test)
+    test_generator = best_config['test_loader']
+    y_test = best_config['test_labels']
+    y_test_pred_proba = best_config['model'].predict(test_generator)
     # Assume 0.5 threshold for now, prob need to optimize over too
     y_test_pred = (y_test_pred_proba > 0.5).astype(int)
     
@@ -319,6 +479,7 @@ def main():
     model_metadata = {
         'model_type': best_config['model_type'],
         'oversampling_ratio': best_config['oversampling_ratio'],
+        'granularity': best_config['granularity'],
         'train_metrics': {
             'accuracy': best_config['accuracy'],
             'precision': best_config['precision'],
