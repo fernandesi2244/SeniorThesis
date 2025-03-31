@@ -492,7 +492,7 @@ def main():
         # 'xgboost',
         # 'svm_rbf',
         # 'svm_poly',
-        'knn_v1',
+        # 'knn_v1', # NOTE: phase 1 never handled oversampling ratio of 1, it stopped short here.
         'knn_v2',
         'knn_v3',
     ]
@@ -586,8 +586,12 @@ def main():
                         n_features = len(feature_indices)
 
                     if n_features > len(feature_indices):
-                        print(f"Warning: Requested {n_features} features, but only {len(feature_indices)} available. Using all available features.")
-                        n_features = len(feature_indices)
+                        if -1 in feature_counts:
+                            print('Already using all features, skipping...')
+                            continue
+                        else:
+                            print(f"Warning: Requested {n_features} features, but only {len(feature_indices)} available. Using all available features.")
+                            n_features = len(feature_indices)
                     
                     # Get the top n features
                     selected_indices = feature_indices[:n_features]

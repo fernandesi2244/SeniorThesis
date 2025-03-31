@@ -478,21 +478,21 @@ def main():
     # ]
 
     model_types = [
-        'random_forest_simple',
-        'random_forest_complex',
-        'isolation_forest',
-        # 'gaussian_RBF',
-        # 'gaussian_matern',
-        'nn_simple',
-        'nn_complex',
-        'logistic_regression_v1',
-        'logistic_regression_v2',
-        'gbm',
-        # 'lightgbm',
-        'xgboost',
-        'svm_rbf',
-        'svm_poly',
-        'knn_v1',
+        # 'random_forest_simple',
+        # 'random_forest_complex',
+        # 'isolation_forest',
+        # # 'gaussian_RBF',
+        # # 'gaussian_matern',
+        # 'nn_simple',
+        # 'nn_complex',
+        # 'logistic_regression_v1',
+        # 'logistic_regression_v2',
+        # 'gbm',
+        # # 'lightgbm',
+        # 'xgboost',
+        # 'svm_rbf',
+        # 'svm_poly',
+        # 'knn_v1',
         'knn_v2',
         'knn_v3',
     ]
@@ -586,8 +586,12 @@ def main():
                         n_features = len(feature_indices)
 
                     if n_features > len(feature_indices):
-                        print(f"Warning: Requested {n_features} features, but only {len(feature_indices)} available. Using all available features.")
-                        n_features = len(feature_indices)
+                        if -1 in feature_counts:
+                            print('Already using all features, skipping...')
+                            continue
+                        else:
+                            print(f"Warning: Requested {n_features} features, but only {len(feature_indices)} available. Using all available features.")
+                            n_features = len(feature_indices)
                     
                     # Get the top n features
                     selected_indices = feature_indices[:n_features]
