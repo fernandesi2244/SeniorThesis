@@ -81,12 +81,12 @@ class SecondarySEPInputDataGenerator(tf.keras.utils.Sequence):
                 overall_data_vector.extend(cube.flatten())
                 
                 # overall_data_vector = np.array(overall_data_vector)
-                overall_data_vector = np.array(overall_data_vector)
+                overall_data_vector = np.array(overall_data_vector, dtype=float)
 
                 x_data.append(overall_data_vector)
 
                 # Class label for the blob, which is just the SEP event rate for the blob at the current timestep
-                produced_SEP = row[-1]
+                produced_SEP = int(row[-1])
                 y_data.append(produced_SEP)
 
             return np.array(x_data), np.array(y_data)
@@ -131,11 +131,11 @@ class SecondarySEPInputDataGenerator(tf.keras.utils.Sequence):
                 volume_data.extend(np.zeros(5*5*5*channels))
 
             overall_data_vector.extend(volume_data)
-            overall_data_vector = np.array(overall_data_vector)
+            overall_data_vector = np.array(overall_data_vector, dtype=float)
 
             x_data.append(overall_data_vector)
 
-            produced_SEP = row[-1]
+            produced_SEP = int(row[-1])
             y_data.append(produced_SEP)
 
         return np.array(x_data), np.array(y_data)

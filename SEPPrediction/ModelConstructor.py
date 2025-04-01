@@ -810,7 +810,9 @@ class ModelConstructor(object):
                 cube_start = start_idx + len(dataloader.BLOB_VECTOR_COLUMNS_GENERAL) + 5 * nx * ny * channels + 5 * nx * nz * channels + 5 * ny * nz * channels
                 cube_end = cube_start + 5 * 5 * 5 * channels
                 cube = tf.keras.layers.Lambda(lambda x: x[:, cube_start:cube_end])(blob)
+                print("Shape of cube:", tf.keras.backend.int_shape(cube))
                 cube = tf.keras.layers.Reshape((5, 5, 5, channels))(cube)
+                print("Shape of cube after reshape:", tf.keras.backend.int_shape(cube))
                 
                 cube_output = cube_conv_layer(cube)
                 cube_output = cube_bn_layer(cube_output)
@@ -854,7 +856,7 @@ class ModelConstructor(object):
             model.summary()
             
             return model
-        elif version == 'cube':
+        if version == 'cube':
             """
             Input format per batch example (all as flattened scalar values immediately following each other)
             - BLOB_ONE_TIME_INFO
@@ -877,14 +879,7 @@ class ModelConstructor(object):
             one_time_info_output = tf.keras.layers.Dense(2, activation='relu')(one_time_info_input)
             one_time_info_output = tf.keras.layers.BatchNormalization()(one_time_info_output)
 
-            # Transform the blob_data_input.
-            # Currently, it is constructed so that we have x TOP_N_BLOBS for the general info and then completely after that X TOP_N_BLOBS for the slices and cube.
-            # However, we want the volume slices and cubes to be contiguous with the general info for each blob. That is, we want the format to be:
-            # x TOP_N_BLOBS
-            # -- BLOB_VECTOR_COLUMNS_GENERAL
-            # -- 5*5*5*channels (5x5x5 cube)
-            # Transform the blob_data_input to this format.
-
+            # Transform the blob_data_input to the desired format
             new_blob_data_input = []
             for i in range(dataloader.TOP_N_BLOBS):
                 start_general_index = i * len(dataloader.BLOB_VECTOR_COLUMNS_GENERAL)
@@ -897,71 +892,83 @@ class ModelConstructor(object):
 
                 new_blob_data_input.append(tf.keras.layers.Concatenate()([general_info, cube]))
             
-            new_blob_data_input = tf.keras.layers.Concatenate()(new_blob_data_input)
-            blob_data_input = new_blob_data_input
-
-            # Process the blob data
+            # Create shared layers for all blobs
+            # Shared layers for blob general info
+            general_dense = tf.keras.layers.Dense(2, activation='relu')
+            general_bn = tf.keras.layers.BatchNormalization()
+            
+            # Shared layers for cube
+            cube_conv_layer = tf.keras.layers.Conv3D(4, (3, 3, 3), activation='relu')
+            cube_bn_layer = tf.keras.layers.BatchNormalization()
+            cube_dense = tf.keras.layers.Dense(8, activation='relu')
+            cube_bn = tf.keras.layers.BatchNormalization()
+            
+            # Shared layers for final blob processing
+            combined_dense = tf.keras.layers.Dense(8, activation='relu')
+            combined_bn = tf.keras.layers.BatchNormalization()
+            
+            # Process each blob with shared layers
             blob_data_output = []
             len_each_blob = len(dataloader.BLOB_VECTOR_COLUMNS_GENERAL) + 5 * 5 * 5 * channels
+            
             for i in range(dataloader.TOP_N_BLOBS):
+                blob = new_blob_data_input[i]
+                
                 # Extract the blob data for this blob
-                start_idx = i * len_each_blob # index w.r.t. blob_data_input
-
-                curr_blob_general_info = tf.keras.layers.Lambda(lambda x: x[:, start_idx:start_idx + len(dataloader.BLOB_VECTOR_COLUMNS_GENERAL)])(blob_data_input)
-
-                # Process curr blob general info, bringing it down to 2 neurons
-                curr_blob_general_info_output = tf.keras.layers.Dense(2, activation='relu')(curr_blob_general_info)
-                curr_blob_general_info_output = tf.keras.layers.BatchNormalization()(curr_blob_general_info_output)
-
-                # Reform cube
+                start_idx = 0  # index w.r.t. individual blob tensor
+                
+                # Extract and process general info
+                curr_blob_general_info = tf.keras.layers.Lambda(lambda x: x[:, start_idx:start_idx + len(dataloader.BLOB_VECTOR_COLUMNS_GENERAL)])(blob)
+                curr_blob_general_info_output = general_dense(curr_blob_general_info)
+                curr_blob_general_info_output = general_bn(curr_blob_general_info_output)
+                
+                # Process cube
                 cube_start = start_idx + len(dataloader.BLOB_VECTOR_COLUMNS_GENERAL)
                 cube_end = cube_start + 5 * 5 * 5 * channels
-                # Reshape the cube to 5x5x5
-                cube = tf.keras.layers.Lambda(lambda x: tf.reshape(x, (-1, 5, 5, 5, channels)))(tf.keras.layers.Lambda(lambda x: x[:, cube_start:cube_end])(blob_data_input))
-
-                # Process cube
-                cube_output = tf.keras.layers.Conv3D(8, (3, 3, 3), activation='relu')(cube)
-                cube_output = tf.keras.layers.BatchNormalization()(cube_output)
-                cube_output = tf.keras.layers.MaxPooling3D((2, 2, 2))(cube_output)
+                cube = tf.keras.layers.Lambda(lambda x: x[:, cube_start:cube_end])(blob)
+                cube = tf.keras.layers.Reshape((5, 5, 5, channels))(cube)
+                
+                cube_output = cube_conv_layer(cube)
+                cube_output = cube_bn_layer(cube_output)
                 cube_output = tf.keras.layers.Flatten()(cube_output)
-                cube_output = tf.keras.layers.Dense(16, activation='relu')(cube_output)
-                cube_output = tf.keras.layers.BatchNormalization()(cube_output)
-
-                # Concatenate all the outputs
+                cube_output = cube_dense(cube_output)
+                cube_output = cube_bn(cube_output)
+                
+                # Concatenate all the outputs for this blob
                 combined_output = tf.keras.layers.Concatenate()([curr_blob_general_info_output, cube_output])
-
+                
                 # Process the combined output
-                combined_output = tf.keras.layers.Dense(16, activation='relu')(combined_output)
-                combined_output = tf.keras.layers.BatchNormalization()(combined_output)
-
+                combined_output = combined_dense(combined_output)
+                combined_output = combined_bn(combined_output)
+                
                 # Add the output to the list
                 blob_data_output.append(combined_output)
-
-            # Aggregate the outputs for each blob, taking the maximum value for each neuron across all blobs
+            
+            # Aggregate the outputs for each blob by taking the maximum value for each neuron across all blobs
             blob_data_output = tf.keras.layers.Maximum()(blob_data_output)
-
+            
             # Combine the one-time info and blob data outputs
             combined_output = tf.keras.layers.Concatenate()([one_time_info_output, blob_data_output])
-
-            # Process the combined output
-            combined_output = tf.keras.layers.Dense(8, activation='relu')(combined_output)
+            
+            # Final processing layers
+            combined_output = tf.keras.layers.Dense(4, activation='relu')(combined_output)
             combined_output = tf.keras.layers.BatchNormalization()(combined_output)
-
+            
             # Output layer
             outputs = tf.keras.layers.Dense(1, activation='sigmoid')(combined_output)
-
+            
             # Create model
             model = tf.keras.models.Model(inputs=flattened_input, outputs=outputs)
-
+            
             # Compile model with the same metrics for all cases
             model.compile(
                 optimizer='adam',
                 loss='binary_crossentropy',
                 metrics=['accuracy', tf.keras.metrics.AUC(), tf.keras.metrics.Precision(), tf.keras.metrics.Recall()]
             )
-
+            
             model.summary()
-
+            
             return model
         elif version == 'slices':
             """
@@ -989,16 +996,7 @@ class ModelConstructor(object):
             one_time_info_output = tf.keras.layers.Dense(2, activation='relu')(one_time_info_input)
             one_time_info_output = tf.keras.layers.BatchNormalization()(one_time_info_output)
 
-            # Transform the blob_data_input.
-            # Currently, it is constructed so that we have x TOP_N_BLOBS for the general info and then completely after that X TOP_N_BLOBS for the slices and cube.
-            # However, we want the volume slices and cubes to be contiguous with the general info for each blob. That is, we want the format to be:
-            # x TOP_N_BLOBS
-            # -- BLOB_VECTOR_COLUMNS_GENERAL
-            # -- 5*nx*ny*channels (5 xy slices)
-            # -- 5*nx*nz*channels (5 xz slices)
-            # -- 5*ny*nz*channels (5 yz slices)
-            # Transform the blob_data_input to this format.
-
+            # Transform the blob_data_input to the desired format
             new_blob_data_input = []
             for i in range(dataloader.TOP_N_BLOBS):
                 start_general_index = i * len(dataloader.BLOB_VECTOR_COLUMNS_GENERAL)
@@ -1012,34 +1010,57 @@ class ModelConstructor(object):
 
                 new_blob_data_input.append(tf.keras.layers.Concatenate()([general_info, slices]))
             
-            new_blob_data_input = tf.keras.layers.Concatenate()(new_blob_data_input)
-            blob_data_input = new_blob_data_input
-
-            # Process the blob data
+            # Create shared layers for processing blobs
+            # Shared layers for blob general info
+            general_dense = tf.keras.layers.Dense(2, activation='relu')
+            general_bn = tf.keras.layers.BatchNormalization()
+            
+            # Shared layers for xy slices
+            xy_conv_layer = tf.keras.layers.Conv2D(4, (5, 5), strides=(2, 2), activation='relu')
+            xy_bn_layer = tf.keras.layers.BatchNormalization()
+            xy_pooling_layer = tf.keras.layers.MaxPooling2D((4, 4))
+            xy_dense = tf.keras.layers.Dense(8, activation='relu')
+            xy_bn = tf.keras.layers.BatchNormalization()
+            
+            # Shared layers for xz slices
+            xz_conv_layer = tf.keras.layers.Conv2D(4, (5, 5), strides=(2, 2), activation='relu')
+            xz_bn_layer = tf.keras.layers.BatchNormalization()
+            xz_pooling_layer = tf.keras.layers.MaxPooling2D((4, 4))
+            xz_dense = tf.keras.layers.Dense(8, activation='relu')
+            xz_bn = tf.keras.layers.BatchNormalization()
+            
+            # Shared layers for yz slices
+            yz_conv_layer = tf.keras.layers.Conv2D(4, (5, 5), strides=(2, 2), activation='relu')
+            yz_bn_layer = tf.keras.layers.BatchNormalization()
+            yz_pooling_layer = tf.keras.layers.MaxPooling2D((4, 4))
+            yz_dense = tf.keras.layers.Dense(8, activation='relu')
+            yz_bn = tf.keras.layers.BatchNormalization()
+            
+            # Shared layers for final blob processing
+            combined_dense = tf.keras.layers.Dense(8, activation='relu')
+            combined_bn = tf.keras.layers.BatchNormalization()
+            
+            # Process each blob with shared layers
             blob_data_output = []
             len_each_blob = len(dataloader.BLOB_VECTOR_COLUMNS_GENERAL) + 5 * nx * ny * channels + 5 * nx * nz * channels + 5 * ny * nz * channels
+            
             for i in range(dataloader.TOP_N_BLOBS):
-                # Extract the blob data for this blob
-                start_idx = i * len_each_blob # index w.r.t. blob_data_input
-
-                curr_blob_general_info = tf.keras.layers.Lambda(lambda x: x[:, start_idx:start_idx + len(dataloader.BLOB_VECTOR_COLUMNS_GENERAL)])(blob_data_input)
-
-                # Process curr blob general info, bringing it down to 2 neurons
-                curr_blob_general_info_output = tf.keras.layers.Dense(2, activation='relu')(curr_blob_general_info)
-                curr_blob_general_info_output = tf.keras.layers.BatchNormalization()(curr_blob_general_info_output)
-
-                # Process xy slices - Apply the same 2D convolution to each slice
-                # Create shared convolutional layers for xy slices
-                # REDUCED FROM 32 to 8 filters to match the slices_and_cube version
-                xy_conv_layer = tf.keras.layers.Conv2D(8, (3, 3), activation='relu')
-                xy_bn_layer = tf.keras.layers.BatchNormalization()
-                xy_pooling_layer = tf.keras.layers.MaxPooling2D((2, 2))
+                blob = new_blob_data_input[i]
                 
+                # Extract the blob data for this blob
+                start_idx = 0  # index w.r.t. individual blob tensor
+                
+                # Extract and process general info
+                curr_blob_general_info = tf.keras.layers.Lambda(lambda x: x[:, start_idx:start_idx + len(dataloader.BLOB_VECTOR_COLUMNS_GENERAL)])(blob)
+                curr_blob_general_info_output = general_dense(curr_blob_general_info)
+                curr_blob_general_info_output = general_bn(curr_blob_general_info_output)
+                
+                # Process xy slices
                 xy_outputs = []
                 for curr_slice in range(5):
                     slice_j_start = start_idx + len(dataloader.BLOB_VECTOR_COLUMNS_GENERAL) + curr_slice * nx * ny * channels
                     slice_j_end = slice_j_start + nx * ny * channels
-                    xy_slice = tf.keras.layers.Lambda(lambda x: x[:, slice_j_start:slice_j_end])(blob_data_input)
+                    xy_slice = tf.keras.layers.Lambda(lambda x: x[:, slice_j_start:slice_j_end])(blob)
                     
                     # Reshape for Conv2D
                     xy_slice = tf.keras.layers.Reshape((nx, ny, channels))(xy_slice)
@@ -1054,21 +1075,15 @@ class ModelConstructor(object):
                 
                 # Take elementwise max across all xy slice outputs
                 xy_output = tf.keras.layers.Maximum()(xy_outputs)
-                xy_output = tf.keras.layers.Dense(16, activation='relu')(xy_output)
-                xy_output = tf.keras.layers.BatchNormalization()(xy_output)
-
-                # Process xz slices - Apply the same 2D convolution to each slice
-                # Create shared convolutional layers for xz slices
-                # REDUCED FROM 32 to 8 filters to match the slices_and_cube version
-                xz_conv_layer = tf.keras.layers.Conv2D(8, (3, 3), activation='relu')
-                xz_bn_layer = tf.keras.layers.BatchNormalization()
-                xz_pooling_layer = tf.keras.layers.MaxPooling2D((2, 2))
+                xy_output = xy_dense(xy_output)
+                xy_output = xy_bn(xy_output)
                 
+                # Process xz slices
                 xz_outputs = []
                 for curr_slice in range(5):
                     slice_j_start = start_idx + len(dataloader.BLOB_VECTOR_COLUMNS_GENERAL) + 5 * nx * ny * channels + curr_slice * nx * nz * channels
                     slice_j_end = slice_j_start + nx * nz * channels
-                    xz_slice = tf.keras.layers.Lambda(lambda x: x[:, slice_j_start:slice_j_end])(blob_data_input)
+                    xz_slice = tf.keras.layers.Lambda(lambda x: x[:, slice_j_start:slice_j_end])(blob)
                     
                     # Reshape for Conv2D
                     xz_slice = tf.keras.layers.Reshape((nx, nz, channels))(xz_slice)
@@ -1083,21 +1098,15 @@ class ModelConstructor(object):
                 
                 # Take elementwise max across all xz slice outputs
                 xz_output = tf.keras.layers.Maximum()(xz_outputs)
-                xz_output = tf.keras.layers.Dense(16, activation='relu')(xz_output)
-                xz_output = tf.keras.layers.BatchNormalization()(xz_output)
-
-                # Process yz slices - Apply the same 2D convolution to each slice
-                # Create shared convolutional layers for yz slices
-                # REDUCED FROM 32 to 8 filters to match the slices_and_cube version
-                yz_conv_layer = tf.keras.layers.Conv2D(8, (3, 3), activation='relu')
-                yz_bn_layer = tf.keras.layers.BatchNormalization()
-                yz_pooling_layer = tf.keras.layers.MaxPooling2D((2, 2))
+                xz_output = xz_dense(xz_output)
+                xz_output = xz_bn(xz_output)
                 
+                # Process yz slices
                 yz_outputs = []
                 for curr_slice in range(5):
                     slice_j_start = start_idx + len(dataloader.BLOB_VECTOR_COLUMNS_GENERAL) + 5 * nx * ny * channels + 5 * nx * nz * channels + curr_slice * ny * nz * channels
                     slice_j_end = slice_j_start + ny * nz * channels
-                    yz_slice = tf.keras.layers.Lambda(lambda x: x[:, slice_j_start:slice_j_end])(blob_data_input)
+                    yz_slice = tf.keras.layers.Lambda(lambda x: x[:, slice_j_start:slice_j_end])(blob)
                     
                     # Reshape for Conv2D
                     yz_slice = tf.keras.layers.Reshape((ny, nz, channels))(yz_slice)
@@ -1112,44 +1121,44 @@ class ModelConstructor(object):
                 
                 # Take elementwise max across all yz slice outputs
                 yz_output = tf.keras.layers.Maximum()(yz_outputs)
-                yz_output = tf.keras.layers.Dense(16, activation='relu')(yz_output)
-                yz_output = tf.keras.layers.BatchNormalization()(yz_output)
-
-                # Concatenate all the outputs
+                yz_output = yz_dense(yz_output)
+                yz_output = yz_bn(yz_output)
+                
+                # Concatenate all the outputs for this blob
                 combined_output = tf.keras.layers.Concatenate()([curr_blob_general_info_output, xy_output, xz_output, yz_output])
-
+                
                 # Process the combined output
-                combined_output = tf.keras.layers.Dense(16, activation='relu')(combined_output)
-                combined_output = tf.keras.layers.BatchNormalization()(combined_output)
-
+                combined_output = combined_dense(combined_output)
+                combined_output = combined_bn(combined_output)
+                
                 # Add the output to the list
                 blob_data_output.append(combined_output)
-
+            
             # Aggregate the outputs for each blob by taking the maximum value for each neuron across all blobs
             blob_data_output = tf.keras.layers.Maximum()(blob_data_output)
-
+            
             # Combine the one-time info and blob data outputs
             combined_output = tf.keras.layers.Concatenate()([one_time_info_output, blob_data_output])
-
-            # Process the combined output
-            combined_output = tf.keras.layers.Dense(8, activation='relu')(combined_output)
+            
+            # Final processing layers
+            combined_output = tf.keras.layers.Dense(4, activation='relu')(combined_output)
             combined_output = tf.keras.layers.BatchNormalization()(combined_output)
-
+            
             # Output layer
             outputs = tf.keras.layers.Dense(1, activation='sigmoid')(combined_output)
-
+            
             # Create model
             model = tf.keras.models.Model(inputs=flattened_input, outputs=outputs)
-
+            
             # Compile model with the same metrics for all cases
             model.compile(
                 optimizer='adam',
                 loss='binary_crossentropy',
                 metrics=['accuracy', tf.keras.metrics.AUC(), tf.keras.metrics.Precision(), tf.keras.metrics.Recall()]
             )
-
+            
             model.summary()
-
+            
             return model
         else:
             raise ValueError('Invalid version')
