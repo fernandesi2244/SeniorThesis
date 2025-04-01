@@ -669,6 +669,8 @@ class ModelConstructor(object):
             one_time_info_output = tf.keras.layers.Dense(2, activation='relu')(one_time_info_input)
             one_time_info_output = tf.keras.layers.BatchNormalization()(one_time_info_output)
 
+            print('Got to transforming blo input')
+
             # Transform the blob_data_input to the desired format
             new_blob_data_input = []
             for i in range(dataloader.TOP_N_BLOBS):
@@ -686,6 +688,8 @@ class ModelConstructor(object):
             # Print the shape of the new blob data input
             print("Shape of new blob data input:", [tf.keras.backend.int_shape(blob) for blob in new_blob_data_input])
             
+            print('Got to shared layer creation')
+
             # Create shared layers for processing blobs
             # Shared layers for blob general info
             general_dense = tf.keras.layers.Dense(2, activation='relu')
@@ -726,6 +730,8 @@ class ModelConstructor(object):
             blob_data_output = []
             len_each_blob = len(dataloader.BLOB_VECTOR_COLUMNS_GENERAL) + 5 * nx * ny * channels + 5 * nx * nz * channels + 5 * ny * nz * channels + 5 * 5 * 5 * channels
             
+            print('Got to for loop for blobs across day')
+
             for i in range(dataloader.TOP_N_BLOBS):
                 blob = new_blob_data_input[i]
                 
@@ -737,6 +743,8 @@ class ModelConstructor(object):
                 curr_blob_general_info_output = general_dense(curr_blob_general_info)
                 curr_blob_general_info_output = general_bn(curr_blob_general_info_output)
                 
+                print('Got to process xy slices')
+
                 # Process xy slices
                 xy_outputs = []
                 for curr_slice in range(5):
@@ -759,6 +767,8 @@ class ModelConstructor(object):
                 xy_output = tf.keras.layers.Maximum()(xy_outputs)
                 xy_output = xy_dense(xy_output)
                 xy_output = xy_bn(xy_output)
+
+                print('Got to process xz slices')
                 
                 # Process xz slices
                 xz_outputs = []
@@ -782,6 +792,8 @@ class ModelConstructor(object):
                 xz_output = tf.keras.layers.Maximum()(xz_outputs)
                 xz_output = xz_dense(xz_output)
                 xz_output = xz_bn(xz_output)
+
+                print('Got to process yz slices')
                 
                 # Process yz slices
                 yz_outputs = []
@@ -805,6 +817,8 @@ class ModelConstructor(object):
                 yz_output = tf.keras.layers.Maximum()(yz_outputs)
                 yz_output = yz_dense(yz_output)
                 yz_output = yz_bn(yz_output)
+
+                print('Got to process cube part')
                 
                 # Process cube
                 cube_start = start_idx + len(dataloader.BLOB_VECTOR_COLUMNS_GENERAL) + 5 * nx * ny * channels + 5 * nx * nz * channels + 5 * ny * nz * channels
