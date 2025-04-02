@@ -1140,18 +1140,13 @@ class ModelConstructor(object):
                 x = tf.keras.layers.Activation('relu')(x)
                 return x
             
-            # Attention mechanism for better feature extraction
-            def attention_block(x, filters):
-                # Channel attention
-                avg_pool = tf.keras.layers.GlobalAveragePooling3D()(x)
-                avg_pool = tf.keras.layers.Dense(filters // 8, activation='relu')(avg_pool)
-                avg_pool = tf.keras.layers.Dense(filters, activation='sigmoid')(avg_pool)
-                
-                # Reshape for multiplication
-                avg_pool = tf.keras.layers.Reshape((1, 1, 1, filters))(avg_pool)
-                
-                # Apply attention
-                x = tf.keras.layers.Multiply()([x, avg_pool])
+            # Removed attention mechanism
+            def additional_conv_block(x, filters):
+                # Additional convolution block to replace attention
+                x = tf.keras.layers.Conv3D(filters, (3, 3, 3), padding='same', activation='relu')(x)
+                x = tf.keras.layers.BatchNormalization()(x)
+                x = tf.keras.layers.Conv3D(filters, (1, 1, 1), padding='same', activation='relu')(x)
+                x = tf.keras.layers.BatchNormalization()(x)
                 return x
                 
             # Shared layers for final blob processing
@@ -1194,8 +1189,8 @@ class ModelConstructor(object):
                 cube_out = residual_block(cube_out, 16)
                 cube_out = residual_block(cube_out, 32)
                 
-                # Apply attention
-                cube_out = attention_block(cube_out, 32)
+                # Apply additional convolutions instead of attention
+                cube_out = additional_conv_block(cube_out, 32)
                 
                 # Add another residual block
                 cube_out = residual_block(cube_out, 64)
@@ -1217,30 +1212,22 @@ class ModelConstructor(object):
                 combined_output = combined_dense2(combined_output)
                 combined_output = combined_bn2(combined_output)
                 
-                # Generate an attention weight for this blob
-                blob_weight = tf.keras.layers.Dense(1, activation='sigmoid')(combined_output)
-                blob_weights.append(blob_weight)
-                
-                # Add the output to the list
+                # Add enhanced output to the list
                 blob_data_output.append(combined_output)
             
-            # Create a weighted aggregation of blob outputs based on attention weights
-            # First, stack all outputs and weights
-            blob_stack = tf.keras.layers.Lambda(lambda x: tf.stack(x, axis=1))(blob_data_output)
-            weight_stack = tf.keras.layers.Lambda(lambda x: tf.stack(x, axis=1))(blob_weights)
-            
-            # Apply softmax to get normalized weights
-            weight_stack = tf.keras.layers.Lambda(lambda x: tf.nn.softmax(x, axis=1))(weight_stack)
-            
-            # Apply weights and sum
-            weighted_blobs = tf.keras.layers.Multiply()([blob_stack, weight_stack])
-            weighted_sum = tf.keras.layers.Lambda(lambda x: tf.reduce_sum(x, axis=1))(weighted_blobs)
-            
-            # Also include a max pooling across blobs for capturing important features
+            # Instead of attention-weighted aggregation, use alternative aggregation methods
+            # First, apply max pooling across blobs
             blob_max = tf.keras.layers.Maximum()(blob_data_output)
             
-            # Combine the weighted sum and max pooling
-            blob_features = tf.keras.layers.Concatenate()([weighted_sum, blob_max])
+            # Also compute average pooling across blobs
+            blob_stack = tf.keras.layers.Lambda(lambda x: tf.stack(x, axis=1))(blob_data_output)
+            blob_avg = tf.keras.layers.Lambda(lambda x: tf.reduce_mean(x, axis=1))(blob_stack)
+            
+            # And add min pooling for completeness
+            blob_min = tf.keras.layers.Minimum()(blob_data_output)
+            
+            # Combine all aggregation methods
+            blob_features = tf.keras.layers.Concatenate()([blob_max, blob_avg, blob_min])
             
             # Combine the one-time info and blob data outputs
             combined_output = tf.keras.layers.Concatenate()([one_time_info_output, blob_features])
