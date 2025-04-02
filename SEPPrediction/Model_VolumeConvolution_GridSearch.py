@@ -266,12 +266,14 @@ def main():
     # granularities = ['per-blob', 'per-disk-4hr', 'per-disk-1d']
     granularities = ['per-disk-1d', 'per-disk-4hr'] # per-blob not coded in ModelConstructor yet
 
-    oversampling_ratios = [-1, 0.65] # [0.1, 0.25, 0.5, 0.65, 0.75, 1] # pos:neg ratio.
+    oversampling_ratios = [-1, 0.1, 0.25, 0.5, 0.65, 0.75, 1] # pos:neg ratio.
 
     model_types = [
-        'conv_nn_on_slices_and_cube',
+        # 'conv_nn_on_slices_and_cube',
         'conv_nn_on_cube',
-        'conv_nn_on_slices',
+        'conv_nn_on_cube_simple',
+        'conv_nn_on_cube_complex',
+        # 'conv_nn_on_slices',
     ]
     
     # Create a list to store all results
@@ -290,7 +292,7 @@ def main():
             # Load the model
             if model_type == 'conv_nn_on_slices_and_cube':
                 dataloader_type = 'slices_and_cube'
-            elif model_type == 'conv_nn_on_cube':
+            elif model_type == 'conv_nn_on_cube' or model_type == 'conv_nn_on_cube_simple' or model_type == 'conv_nn_on_cube_complex':
                 dataloader_type = 'cube'
             elif model_type == 'conv_nn_on_slices':
                 dataloader_type = 'slices'
@@ -374,6 +376,10 @@ def main():
 
                     X_train, y_train = shuffle(X_train, y_train, random_state=42)
 
+                    # Print one record from the training set
+                    print('Train set example:', X_train[0])
+                    print('Train set label:', y_train[0])
+
                 train_arr = np.concatenate([X_train, y_train.reshape(-1, 1)], axis=1)
                 val_arr = np.concatenate([X_val, y_val.reshape(-1, 1)], axis=1)
                 test_arr = np.concatenate([X_test, y_test.reshape(-1, 1)], axis=1)
@@ -382,7 +388,7 @@ def main():
                     train_generator = SC_SecondarySEPInputDataGenerator(train_arr, batch_size=32, shuffle=False, granularity=granularity, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
                     val_generator = SC_SecondarySEPInputDataGenerator(val_arr, batch_size=32, shuffle=False, granularity=granularity, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
                     test_generator = SC_SecondarySEPInputDataGenerator(test_arr, batch_size=32, shuffle=False, granularity=granularity, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
-                elif model_type == 'conv_nn_on_cube':
+                elif model_type == 'conv_nn_on_cube' or model_type == 'conv_nn_on_cube_simple' or model_type == 'conv_nn_on_cube_complex':
                     train_generator = C_SecondarySEPInputDataGenerator(train_arr, batch_size=32, shuffle=False, granularity=granularity, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
                     val_generator = C_SecondarySEPInputDataGenerator(val_arr, batch_size=32, shuffle=False, granularity=granularity, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
                     test_generator = C_SecondarySEPInputDataGenerator(test_arr, batch_size=32, shuffle=False, granularity=granularity, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
@@ -392,6 +398,11 @@ def main():
                     test_generator = S_SecondarySEPInputDataGenerator(test_arr, batch_size=32, shuffle=False, granularity=granularity, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
                 else:
                     raise ValueError(f"Invalid model type: {model_type}")
+
+                # Print one record from the first batch of the training set
+                X_batch, y_batch = train_generator[0]
+                print('Train set example shape:', X_batch[0].shape)
+                print('Train set label:', y_batch[0])
 
                 # Define some callbacks to improve training.
                 early_stopping = tf.keras.callbacks.EarlyStopping(monitor="val_loss", patience=10)
