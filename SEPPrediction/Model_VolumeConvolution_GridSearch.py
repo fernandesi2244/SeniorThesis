@@ -273,12 +273,12 @@ def load_data(granularity, split_seed):
         if grouped[grouped == 1].count() == 1:
             min_train_regions = grouped[grouped == 1].index
             remaining_train_regions, test_regions = train_test_split(
-                grouped[grouped == 0].index, test_size=0.2, random_state=split_seed
+                grouped[grouped == 0].index, test_size=0.2, random_state=42 # we always want the test set to be the same
             )
             train_regions = np.concatenate([min_train_regions, remaining_train_regions])
         else:
             train_regions, test_regions = train_test_split(
-                grouped.index, test_size=0.2, stratify=grouped, random_state=split_seed
+                grouped.index, test_size=0.2, stratify=grouped, random_state=42 # we always want the test set to be the same
             )
     
         # Select records based on their active region
