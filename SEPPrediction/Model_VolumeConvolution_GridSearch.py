@@ -23,10 +23,6 @@ import random
 from sklearn.utils import shuffle
 import tensorflow as tf
 
-# Enable unsafe deserialization
-import keras
-keras.config.enable_unsafe_deserialization()
-
 GENERATED_VOLUME_SLICES_AND_CUBE_PATH = '/mnt/horton_share/development/data/drms/MagPy_Shared_Data/VolumeSlicesAndCubes'
 
 NAME = 'sep_prediction_volume_convolution_grid_search'
@@ -475,22 +471,19 @@ def main():
                     # Define callbacks for this split
                     early_stopping = tf.keras.callbacks.EarlyStopping(monitor="val_loss", patience=10)
                     reduce_lr = tf.keras.callbacks.ReduceLROnPlateau(monitor="val_loss", patience=5)
-                    checkpoint_best = tf.keras.callbacks.ModelCheckpoint(
-                        f"{model_name}_best.keras",
-                        save_best_only=True,
-                    )
+                    # checkpoint_best = tf.keras.callbacks.ModelCheckpoint(
+                    #     f"{model_name}_best.keras",
+                    #     save_best_only=True,
+                    # )
                     
                     # Train the model for this split
                     train_start = time.time()
                     
                     model.fit(train_generator, epochs=10, validation_data=val_generator,
-                              callbacks=[early_stopping, reduce_lr, checkpoint_best])
+                              callbacks=[early_stopping, reduce_lr])
 
                     train_end = time.time()
                     print(f'Model trained in {train_end - train_start:.2f} seconds for split {split_idx+1}')
-                    
-                    # Load the best model for evaluation
-                    model = tf.keras.models.load_model(f"{model_name}_best.keras")
                     
                     # Evaluate on validation set
                     val_pred_proba = model.predict(val_generator)
