@@ -893,21 +893,27 @@ class ModelConstructor(object):
                 -- 5*5*5*channels (5x5x5 cube)
             """
             nx, ny, nz, channels = 200, 400, 100, 3
-
-            complete_input_size = len(dataloader.BLOB_ONE_TIME_INFO) + dataloader.TOP_N_BLOBS * (
-                len(dataloader.BLOB_VECTOR_COLUMNS_GENERAL) + 5 * 5 * 5 * channels)
+            
+            # Define constants to use in Lambda functions
+            BLOB_ONE_TIME_INFO_LEN = len(dataloader.BLOB_ONE_TIME_INFO)
+            BLOB_VECTOR_COLUMNS_GENERAL_LEN = len(dataloader.BLOB_VECTOR_COLUMNS_GENERAL)
+            TOP_N_BLOBS = dataloader.TOP_N_BLOBS
+            CUBE_SIZE = 5 * 5 * 5 * channels
+            
+            complete_input_size = BLOB_ONE_TIME_INFO_LEN + TOP_N_BLOBS * (
+                BLOB_VECTOR_COLUMNS_GENERAL_LEN + CUBE_SIZE)
             
             flattened_input = tf.keras.layers.Input(shape=(complete_input_size,))
 
-            # Split the input into the two main parts
+            # Create Lambda functions that don't reference dataloader directly
             one_time_info_input = tf.keras.layers.Lambda(
-                lambda x: x[:, :len(dataloader.BLOB_ONE_TIME_INFO)],
-                output_shape=(len(dataloader.BLOB_ONE_TIME_INFO),)
+                lambda x, size=BLOB_ONE_TIME_INFO_LEN: x[:, :size],
+                output_shape=(BLOB_ONE_TIME_INFO_LEN,)
             )(flattened_input)
             
             blob_data_input = tf.keras.layers.Lambda(
-                lambda x: x[:, len(dataloader.BLOB_ONE_TIME_INFO):],
-                output_shape=(complete_input_size - len(dataloader.BLOB_ONE_TIME_INFO),)
+                lambda x, size=BLOB_ONE_TIME_INFO_LEN: x[:, size:],
+                output_shape=(complete_input_size - BLOB_ONE_TIME_INFO_LEN,)
             )(flattened_input)
 
             # Process the one-time info, bringing it down to 2 neurons
@@ -916,19 +922,21 @@ class ModelConstructor(object):
 
             # Transform the blob_data_input to the desired format
             new_blob_data_input = []
-            for i in range(dataloader.TOP_N_BLOBS):
-                start_general_index = i * len(dataloader.BLOB_VECTOR_COLUMNS_GENERAL)
-                end_general_index = start_general_index + len(dataloader.BLOB_VECTOR_COLUMNS_GENERAL)
+            for i in range(TOP_N_BLOBS):
+                start_general_index = i * BLOB_VECTOR_COLUMNS_GENERAL_LEN
+                end_general_index = start_general_index + BLOB_VECTOR_COLUMNS_GENERAL_LEN
+                
                 general_info = tf.keras.layers.Lambda(
-                    lambda x: x[:, start_general_index:end_general_index],
-                    output_shape=(len(dataloader.BLOB_VECTOR_COLUMNS_GENERAL),)
+                    lambda x, start=start_general_index, end=end_general_index: x[:, start:end],
+                    output_shape=(BLOB_VECTOR_COLUMNS_GENERAL_LEN,)
                 )(blob_data_input)
 
-                start_cube_index = dataloader.TOP_N_BLOBS * len(dataloader.BLOB_VECTOR_COLUMNS_GENERAL) + i * (5 * 5 * 5 * channels)
-                end_cube_index = start_cube_index + 5 * 5 * 5 * channels
+                start_cube_index = TOP_N_BLOBS * BLOB_VECTOR_COLUMNS_GENERAL_LEN + i * CUBE_SIZE
+                end_cube_index = start_cube_index + CUBE_SIZE
+                
                 cube = tf.keras.layers.Lambda(
-                    lambda x: x[:, start_cube_index:end_cube_index],
-                    output_shape=(5 * 5 * 5 * channels,)
+                    lambda x, start=start_cube_index, end=end_cube_index: x[:, start:end],
+                    output_shape=(CUBE_SIZE,)
                 )(blob_data_input)
 
                 new_blob_data_input.append(tf.keras.layers.Concatenate()([general_info, cube]))
@@ -950,28 +958,25 @@ class ModelConstructor(object):
             
             # Process each blob with shared layers
             blob_data_output = []
-            len_each_blob = len(dataloader.BLOB_VECTOR_COLUMNS_GENERAL) + 5 * 5 * 5 * channels
             
-            for i in range(dataloader.TOP_N_BLOBS):
+            for i in range(TOP_N_BLOBS):
                 blob = new_blob_data_input[i]
                 
-                # Extract the blob data for this blob
+                # Extract the blob data for this blob - use constants for indices
                 start_idx = 0  # index w.r.t. individual blob tensor
                 
                 # Extract and process general info
                 curr_blob_general_info = tf.keras.layers.Lambda(
-                    lambda x: x[:, start_idx:start_idx + len(dataloader.BLOB_VECTOR_COLUMNS_GENERAL)],
-                    output_shape=(len(dataloader.BLOB_VECTOR_COLUMNS_GENERAL),)
+                    lambda x, size=BLOB_VECTOR_COLUMNS_GENERAL_LEN: x[:, :size],
+                    output_shape=(BLOB_VECTOR_COLUMNS_GENERAL_LEN,)
                 )(blob)
                 curr_blob_general_info_output = general_dense(curr_blob_general_info)
                 curr_blob_general_info_output = general_bn(curr_blob_general_info_output)
                 
                 # Process cube
-                cube_start = start_idx + len(dataloader.BLOB_VECTOR_COLUMNS_GENERAL)
-                cube_end = cube_start + 5 * 5 * 5 * channels
                 cube = tf.keras.layers.Lambda(
-                    lambda x: x[:, cube_start:cube_end],
-                    output_shape=(5 * 5 * 5 * channels,)
+                    lambda x, start=BLOB_VECTOR_COLUMNS_GENERAL_LEN, size=CUBE_SIZE: x[:, start:start+size],
+                    output_shape=(CUBE_SIZE,)
                 )(blob)
                 cube = tf.keras.layers.Reshape((5, 5, 5, channels))(cube)
                 
