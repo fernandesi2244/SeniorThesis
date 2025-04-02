@@ -1102,38 +1102,29 @@ class ModelConstructor(object):
             one_time_info_input = tf.keras.layers.Lambda(lambda x: x[:, :len(dataloader.BLOB_ONE_TIME_INFO)])(flattened_input)
             blob_data_input = tf.keras.layers.Lambda(lambda x: x[:, len(dataloader.BLOB_ONE_TIME_INFO):])(flattened_input)
 
-            # Process the one-time info with minimal network - reduced sizes
+            # Process the one-time info with minimal network
             one_time_info_output = tf.keras.layers.Dense(8, activation='relu')(one_time_info_input)
             one_time_info_output = tf.keras.layers.BatchNormalization()(one_time_info_output)
 
-            # Create minimal shared layers for general info
-            # Shared layer for blob general info - reduced sizes
+            # Minimal shared layer for blob general info
             general_dense = tf.keras.layers.Dense(6, activation='relu')
             general_bn = tf.keras.layers.BatchNormalization()
             
-            # Enhanced shared layers for cube - increased complexity
-            # First convolutional block
-            cube_conv1a = tf.keras.layers.Conv3D(24, (3, 3, 3), padding='same', activation='relu')
-            cube_bn1a = tf.keras.layers.BatchNormalization()
-            cube_conv1b = tf.keras.layers.Conv3D(32, (3, 3, 3), padding='same', activation='relu')
-            cube_bn1b = tf.keras.layers.BatchNormalization()
+            # Reduced complexity for cube processing
+            # First convolutional block - reduced filters
+            cube_conv1 = tf.keras.layers.Conv3D(12, (3, 3, 3), padding='same', activation='relu')
+            cube_bn1 = tf.keras.layers.BatchNormalization()
             
-            # Second convolutional block with different kernel size
-            cube_conv2a = tf.keras.layers.Conv3D(32, (1, 1, 1), padding='same', activation='relu')
-            cube_bn2a = tf.keras.layers.BatchNormalization()
-            cube_conv2b = tf.keras.layers.Conv3D(48, (3, 3, 3), padding='same', activation='relu')
-            cube_bn2b = tf.keras.layers.BatchNormalization()
+            # Second convolutional block - reduced filters
+            cube_conv2 = tf.keras.layers.Conv3D(16, (3, 3, 3), padding='same', activation='relu')
+            cube_bn2 = tf.keras.layers.BatchNormalization()
             
-            # Third convolutional block
-            cube_conv3 = tf.keras.layers.Conv3D(64, (2, 2, 2), padding='same', activation='relu')
-            cube_bn3 = tf.keras.layers.BatchNormalization()
-            
-            # Post-conv dense processing - kept moderate
-            cube_dense = tf.keras.layers.Dense(32, activation='relu')
+            # Post-conv dense processing - reduced size
+            cube_dense = tf.keras.layers.Dense(20, activation='relu')
             cube_bn_dense = tf.keras.layers.BatchNormalization()
             
-            # Combined processing - minimal
-            combined_dense = tf.keras.layers.Dense(16, activation='relu')
+            # Combined processing
+            combined_dense = tf.keras.layers.Dense(12, activation='relu')
             combined_bn = tf.keras.layers.BatchNormalization()
             
             # Process each blob with shared layers
@@ -1150,31 +1141,23 @@ class ModelConstructor(object):
                 end_cube_index = start_cube_index + 5 * 5 * 5 * channels
                 cube = tf.keras.layers.Lambda(lambda x: x[:, start_cube_index:end_cube_index])(blob_data_input)
                 
-                # Process general info - minimal processing
+                # Process general info
                 general_out = general_dense(general_info)
                 general_out = general_bn(general_out)
                 
-                # Process cube with enhanced convolutional architecture
+                # Process cube with simplified convolutional architecture
                 cube = tf.keras.layers.Reshape((5, 5, 5, channels))(cube)
                 
-                # First convolutional block
-                cube_out = cube_conv1a(cube)
-                cube_out = cube_bn1a(cube_out)
-                cube_out = cube_conv1b(cube_out)
-                cube_out = cube_bn1b(cube_out)
+                # First convolutional layer
+                cube_out = cube_conv1(cube)
+                cube_out = cube_bn1(cube_out)
                 
-                # First pooling
+                # Pooling to reduce dimensions
                 cube_out = tf.keras.layers.MaxPooling3D(pool_size=(2, 2, 2), padding='same')(cube_out)
                 
-                # Second convolutional block
-                cube_out = cube_conv2a(cube_out)
-                cube_out = cube_bn2a(cube_out)
-                cube_out = cube_conv2b(cube_out)
-                cube_out = cube_bn2b(cube_out)
-                
-                # Third convolutional block
-                cube_out = cube_conv3(cube_out)
-                cube_out = cube_bn3(cube_out)
+                # Second convolutional layer
+                cube_out = cube_conv2(cube_out)
+                cube_out = cube_bn2(cube_out)
                 
                 # Flatten and process with dense layer
                 cube_out = tf.keras.layers.Flatten()(cube_out)
@@ -1195,8 +1178,8 @@ class ModelConstructor(object):
             # Combine the one-time info and blob data outputs
             combined_output = tf.keras.layers.Concatenate()([one_time_info_output, blob_features])
             
-            # Final processing layer - kept minimal
-            x = tf.keras.layers.Dense(16, activation='relu')(combined_output)
+            # Final processing layer
+            x = tf.keras.layers.Dense(12, activation='relu')(combined_output)
             x = tf.keras.layers.BatchNormalization()(x)
             
             # Output layer
