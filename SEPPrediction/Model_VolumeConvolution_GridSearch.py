@@ -24,7 +24,8 @@ from sklearn.utils import shuffle
 import tensorflow as tf
 
 # Enable unsafe deserialization
-tf.keras.config.enable_unsafe_deserialization()
+import keras
+keras.config.enable_unsafe_deserialization()
 
 GENERATED_VOLUME_SLICES_AND_CUBE_PATH = '/mnt/horton_share/development/data/drms/MagPy_Shared_Data/VolumeSlicesAndCubes'
 
