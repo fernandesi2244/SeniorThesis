@@ -1102,20 +1102,34 @@ class ModelConstructor(object):
             one_time_info_input = tf.keras.layers.Lambda(lambda x: x[:, :len(dataloader.BLOB_ONE_TIME_INFO)])(flattened_input)
             blob_data_input = tf.keras.layers.Lambda(lambda x: x[:, len(dataloader.BLOB_ONE_TIME_INFO):])(flattened_input)
 
-            # Process the one-time info with a small network
-            one_time_info_output = tf.keras.layers.Dense(8, activation='relu')(one_time_info_input)
+            # Process the one-time info with a moderate network - increased sizes
+            x = tf.keras.layers.Dense(32, activation='relu')(one_time_info_input)
+            x = tf.keras.layers.BatchNormalization()(x)
+            one_time_info_output = tf.keras.layers.Dense(24, activation='relu')(x)
             one_time_info_output = tf.keras.layers.BatchNormalization()(one_time_info_output)
 
             # Create moderate-sized shared layers for all blobs
-            # Shared layers for blob general info
-            general_dense = tf.keras.layers.Dense(4, activation='relu')
-            general_bn = tf.keras.layers.BatchNormalization()
+            # Shared layers for blob general info - increased sizes
+            general_dense1 = tf.keras.layers.Dense(24, activation='relu')
+            general_bn1 = tf.keras.layers.BatchNormalization()
+            general_dense2 = tf.keras.layers.Dense(16, activation='relu')
+            general_bn2 = tf.keras.layers.BatchNormalization()
             
-            # Shared layers for cube - small conv layer
-            # Using only 8 filters to keep parameter count down
-            cube_conv_layer = tf.keras.layers.Conv3D(8, (3, 3, 3), padding='same', activation='relu')
-            cube_bn = tf.keras.layers.BatchNormalization()
-            cube_dense = tf.keras.layers.Dense(12, activation='relu')
+            # Shared layers for cube - increased filter count and added second conv
+            cube_conv1 = tf.keras.layers.Conv3D(16, (3, 3, 3), padding='same', activation='relu')
+            cube_bn1 = tf.keras.layers.BatchNormalization()
+            cube_conv2 = tf.keras.layers.Conv3D(24, (3, 3, 3), padding='same', activation='relu')
+            cube_bn2 = tf.keras.layers.BatchNormalization()
+            
+            # Post-conv dense processing
+            cube_dense1 = tf.keras.layers.Dense(32, activation='relu')
+            cube_bn3 = tf.keras.layers.BatchNormalization()
+            cube_dense2 = tf.keras.layers.Dense(24, activation='relu')
+            cube_bn4 = tf.keras.layers.BatchNormalization()
+            
+            # Combined processing
+            combined_dense = tf.keras.layers.Dense(28, activation='relu')
+            combined_bn = tf.keras.layers.BatchNormalization()
             
             # Process each blob with shared layers
             blob_data_output = []
@@ -1131,37 +1145,61 @@ class ModelConstructor(object):
                 end_cube_index = start_cube_index + 5 * 5 * 5 * channels
                 cube = tf.keras.layers.Lambda(lambda x: x[:, start_cube_index:end_cube_index])(blob_data_input)
                 
-                # Process general info
-                general_out = general_dense(general_info)
-                general_out = general_bn(general_out)
+                # Process general info with two dense layers
+                general_out = general_dense1(general_info)
+                general_out = general_bn1(general_out)
+                general_out = general_dense2(general_out)
+                general_out = general_bn2(general_out)
                 
-                # Process cube
+                # Process cube with two conv layers
                 cube = tf.keras.layers.Reshape((5, 5, 5, channels))(cube)
-                cube_out = cube_conv_layer(cube)
-                cube_out = cube_bn(cube_out)
+                cube_out = cube_conv1(cube)
+                cube_out = cube_bn1(cube_out)
+                cube_out = cube_conv2(cube_out)
+                cube_out = cube_bn2(cube_out)
                 
-                # Global pooling to drastically reduce parameters
-                cube_out = tf.keras.layers.GlobalAveragePooling3D()(cube_out)
-                cube_out = cube_dense(cube_out)
+                # Apply max pooling (rather than global average pooling)
+                # This keeps more parameters while reducing dimensions
+                cube_out = tf.keras.layers.MaxPooling3D(pool_size=(2, 2, 2))(cube_out)
+                
+                # Flatten and process with dense layers
+                cube_out = tf.keras.layers.Flatten()(cube_out)
+                cube_out = cube_dense1(cube_out)
+                cube_out = cube_bn3(cube_out)
+                cube_out = cube_dense2(cube_out)
+                cube_out = cube_bn4(cube_out)
                 
                 # Concatenate the outputs for this blob
                 combined_output = tf.keras.layers.Concatenate()([general_out, cube_out])
+                combined_output = combined_dense(combined_output)
+                combined_output = combined_bn(combined_output)
                 
                 # Add to blob outputs list
                 blob_data_output.append(combined_output)
             
-            # Simple max pooling across blobs
-            blob_features = tf.keras.layers.Maximum()(blob_data_output)
+            # Max and average pooling across blobs
+            blob_max = tf.keras.layers.Maximum()(blob_data_output)
+            
+            # Stack and compute average
+            blob_stack = tf.keras.layers.Lambda(lambda x: tf.stack(x, axis=1))(blob_data_output)
+            blob_avg = tf.keras.layers.Lambda(lambda x: tf.reduce_mean(x, axis=1))(blob_stack)
+            
+            # Combine max and avg features
+            blob_features = tf.keras.layers.Concatenate()([blob_max, blob_avg])
             
             # Combine the one-time info and blob data outputs
             combined_output = tf.keras.layers.Concatenate()([one_time_info_output, blob_features])
             
-            # Final processing layer - keeping it small
-            combined_output = tf.keras.layers.Dense(10, activation='relu')(combined_output)
-            combined_output = tf.keras.layers.BatchNormalization()(combined_output)
+            # Final processing layers - increased in size and depth
+            x = tf.keras.layers.Dense(40, activation='relu')(combined_output)
+            x = tf.keras.layers.BatchNormalization()(x)
+            x = tf.keras.layers.Dense(32, activation='relu')(x)
+            x = tf.keras.layers.BatchNormalization()(x)
+            x = tf.keras.layers.Dense(16, activation='relu')(x)
+            x = tf.keras.layers.BatchNormalization()(x)
             
             # Output layer
-            outputs = tf.keras.layers.Dense(1, activation='sigmoid')(combined_output)
+            outputs = tf.keras.layers.Dense(1, activation='sigmoid')(x)
             
             # Create model
             model = tf.keras.models.Model(inputs=flattened_input, outputs=outputs)
@@ -1170,7 +1208,7 @@ class ModelConstructor(object):
             model.compile(
                 optimizer='adam',
                 loss='binary_crossentropy',
-                metrics=['accuracy', tf.keras.metrics.AUC()]
+                metrics=['accuracy', tf.keras.metrics.AUC(), tf.keras.metrics.Precision(), tf.keras.metrics.Recall()]
             )
             
             # Print model summary to verify parameter count
