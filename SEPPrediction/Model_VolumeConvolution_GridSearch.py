@@ -82,9 +82,18 @@ def evaluate_model(y_true, y_pred, y_pred_proba, set_name=""):
     recall = recall_score(y_true, y_pred)
     f1 = f1_score(y_true, y_pred)
     auc = roc_auc_score(y_true, y_pred_proba)
-    
-    # Create confusion matrix
+
+    """
+    HSS = 2 * (TP * TN - FN * FP)/((TP + FN) * (FN + TN) + (TP + FP) * (TN + FP))
+    TSS = TP / (TP + FN) - FP / (FP + TN)
+    """
+    # Calculate confusion matrix components
     cm = confusion_matrix(y_true, y_pred)
+    TN, FP, FN, TP = cm.ravel()
+
+    # Calculate HSS and TSS
+    hss = 2 * (TP * TN - FN * FP) / ((TP + FN) * (FN + TN) + (TP + FP) * (TN + FP))
+    tss = TP / (TP + FN) - FP / (FP + TN)
     
     # Print metrics
     print(f'{set_name} Results:')
@@ -93,6 +102,8 @@ def evaluate_model(y_true, y_pred, y_pred_proba, set_name=""):
     print(f'Recall: {recall:.4f}')
     print(f'F1 Score: {f1:.4f}')
     print(f'AUC: {auc:.4f}')
+    print(f'HSS: {hss:.4f}')
+    print(f'TSS: {tss:.4f}')
     print(f'Confusion Matrix:')
     print(cm)
     
@@ -103,6 +114,8 @@ def evaluate_model(y_true, y_pred, y_pred_proba, set_name=""):
         'recall': recall,
         'f1': f1,
         'auc': auc,
+        'hss': hss,
+        'tss': tss,
         'confusion_matrix': cm
     }
 
@@ -448,6 +461,8 @@ def main():
                     'recall': metrics['recall'],
                     'f1': metrics['f1'],
                     'auc': metrics['auc'],
+                    'hss': metrics['hss'],
+                    'tss': metrics['tss'],
                     'test_loader': test_generator,
                     'test_labels': y_test,
                 }
@@ -477,6 +492,8 @@ def main():
     print(f"Precision: {best_config['precision']:.4f}")
     print(f"Recall: {best_config['recall']:.4f}")
     print(f"AUC: {best_config['auc']:.4f}")
+    print(f"HSS: {best_config['hss']:.4f}")
+    print(f"TSS: {best_config['tss']:.4f}")
     
     # Now, evaluate the best model on the test set
     print("\nEvaluating best model on test set...")
@@ -501,7 +518,9 @@ def main():
             'precision': best_config['precision'],
             'recall': best_config['recall'],
             'f1': best_config['f1'],
-            'auc': best_config['auc']
+            'auc': best_config['auc'],
+            'hss': best_config['hss'],
+            'tss': best_config['tss'],
         },
         'test_metrics': test_metrics,
     }
