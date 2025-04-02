@@ -659,17 +659,22 @@ class ModelConstructor(object):
                 len(dataloader.BLOB_VECTOR_COLUMNS_GENERAL) + 5 * nx * ny * channels + 5 * nx * nz * channels +
                 5 * ny * nz * channels + 5 * 5 * 5 * channels)
             
+            print('Complete input size:', complete_input_size)
+            
             flattened_input = tf.keras.layers.Input(shape=(complete_input_size,))
 
             # Split the input into the two main parts
             one_time_info_input = tf.keras.layers.Lambda(lambda x: x[:, :len(dataloader.BLOB_ONE_TIME_INFO)])(flattened_input)
             blob_data_input = tf.keras.layers.Lambda(lambda x: x[:, len(dataloader.BLOB_ONE_TIME_INFO):])(flattened_input)
 
+            print('One time info input shape:', tf.keras.backend.int_shape(one_time_info_input))
+            print('Blob data input shape:', tf.keras.backend.int_shape(blob_data_input))
+
             # Process the one-time info, bringing it down to 2 neurons
             one_time_info_output = tf.keras.layers.Dense(2, activation='relu')(one_time_info_input)
             one_time_info_output = tf.keras.layers.BatchNormalization()(one_time_info_output)
 
-            print('Got to transforming blo input')
+            print('Got to transforming blob input')
 
             # Transform the blob_data_input to the desired format
             new_blob_data_input = []
@@ -740,6 +745,7 @@ class ModelConstructor(object):
                 
                 # Extract and process general info
                 curr_blob_general_info = tf.keras.layers.Lambda(lambda x: x[:, start_idx:start_idx + len(dataloader.BLOB_VECTOR_COLUMNS_GENERAL)])(blob)
+                print(f'Start to end index for blob {i} general info:', start_idx, start_idx + len(dataloader.BLOB_VECTOR_COLUMNS_GENERAL))
                 curr_blob_general_info_output = general_dense(curr_blob_general_info)
                 curr_blob_general_info_output = general_bn(curr_blob_general_info_output)
                 
@@ -750,6 +756,7 @@ class ModelConstructor(object):
                 for curr_slice in range(5):
                     slice_j_start = start_idx + len(dataloader.BLOB_VECTOR_COLUMNS_GENERAL) + curr_slice * nx * ny * channels
                     slice_j_end = slice_j_start + nx * ny * channels
+                    print(f'Start to end index for blob {i} xy slice {curr_slice}:', slice_j_start, slice_j_end)
                     xy_slice = tf.keras.layers.Lambda(lambda x: x[:, slice_j_start:slice_j_end])(blob)
                     
                     # Reshape for Conv2D
@@ -775,6 +782,7 @@ class ModelConstructor(object):
                 for curr_slice in range(5):
                     slice_j_start = start_idx + len(dataloader.BLOB_VECTOR_COLUMNS_GENERAL) + 5 * nx * ny * channels + curr_slice * nx * nz * channels
                     slice_j_end = slice_j_start + nx * nz * channels
+                    print(f'Start to end index for blob {i} xz slice {curr_slice}:', slice_j_start, slice_j_end)
                     xz_slice = tf.keras.layers.Lambda(lambda x: x[:, slice_j_start:slice_j_end])(blob)
                     
                     # Reshape for Conv2D
@@ -800,6 +808,7 @@ class ModelConstructor(object):
                 for curr_slice in range(5):
                     slice_j_start = start_idx + len(dataloader.BLOB_VECTOR_COLUMNS_GENERAL) + 5 * nx * ny * channels + 5 * nx * nz * channels + curr_slice * ny * nz * channels
                     slice_j_end = slice_j_start + ny * nz * channels
+                    print(f'Start to end index for blob {i} yz slice {curr_slice}:', slice_j_start, slice_j_end)
                     yz_slice = tf.keras.layers.Lambda(lambda x: x[:, slice_j_start:slice_j_end])(blob)
                     
                     # Reshape for Conv2D
@@ -823,6 +832,7 @@ class ModelConstructor(object):
                 # Process cube
                 cube_start = start_idx + len(dataloader.BLOB_VECTOR_COLUMNS_GENERAL) + 5 * nx * ny * channels + 5 * nx * nz * channels + 5 * ny * nz * channels
                 cube_end = cube_start + 5 * 5 * 5 * channels
+                print(f'Start to end index for blob {i} cube:', cube_start, cube_end)
                 cube = tf.keras.layers.Lambda(lambda x: x[:, cube_start:cube_end])(blob)
                 print("Shape of cube:", tf.keras.backend.int_shape(cube))
                 cube = tf.keras.layers.Reshape((5, 5, 5, channels))(cube)
