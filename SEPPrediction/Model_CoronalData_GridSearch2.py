@@ -459,12 +459,12 @@ def main():
     print(f"Starting combined feature selection and PCA analysis at {time.ctime()}")
 
     # granularities = ['per-blob', 'per-disk-4hr', 'per-disk-1d'] # ['per-blob', 'per-disk-4hr', 'per-disk-1d']
-    granularities = ['per-disk-4hr', 'per-blob']
+    granularities = ['per-disk-4hr']
 
-    oversampling_ratios = [0.45, 0.5, 0.55, 1] # [0.1, 0.25, 0.5, 0.65, 0.75, 1] # pos:neg ratio. TODO: figure out some other day why > 0.65 isn't working
+    oversampling_ratios = [0.3, 0.4, 0.5, 0.6, 0.7] # [0.1, 0.25, 0.5, 0.65, 0.75, 1] # pos:neg ratio. TODO: figure out some other day why > 0.65 isn't working
     
     # Define feature counts to test
-    feature_counts = [50, 55, 60, 65, 70] #[20, 40, 60, 80, 100]
+    feature_counts = [55, 60, 65, 70] #[20, 40, 60, 80, 100]
     
     # Define component counts to test for PCA
     component_counts = [-1, 5, 7, 9, 11] #[-1, 2, 3, 5, 10, 15, 20, 25, 30, 40, 50]
@@ -473,11 +473,9 @@ def main():
     model_types = [
         'random_forest_complex',
         'nn_simple',
-        'logistic_regression_v1',
         'logistic_regression_v2',
         'gbm',
-        'xgboost',
-        'svm_rbf',
+        'svm_poly',
     ]
 
     # TODO: later, look at ensembling techniques

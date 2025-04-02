@@ -467,15 +467,16 @@ def main():
     feature_counts = [30, 40, 50, 60, 70] #[20, 40, 60, 80, 100]
     
     # Define component counts to test for PCA
-    component_counts = [-1, 37, 40, 42] #[-1, 2, 3, 5, 10, 15, 20, 25, 30, 40, 50]
+    component_counts = [-1] #[-1, 2, 3, 5, 10, 15, 20, 25, 30, 40, 50]
 
     # Model files
     model_types = [
         'random_forest_complex',
         'nn_complex',
-        'logistic_regression_v1',
         'logistic_regression_v2',
         'xgboost',
+        'gbm',
+        'svm_rbf',
         'svm_poly',
     ]
 

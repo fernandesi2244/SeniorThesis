@@ -461,7 +461,7 @@ def main():
     #granularities = ['per-blob', 'per-disk-4hr', 'per-disk-1d'] # ['per-blob', 'per-disk-4hr', 'per-disk-1d']
     granularities = ['per-disk-4hr']
 
-    oversampling_ratios = [0.35, 0.45, 0.55, 0.65] # [0.1, 0.25, 0.5, 0.65, 0.75, 1] # pos:neg ratio. TODO: figure out some other day why > 0.65 isn't working
+    oversampling_ratios = [0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8] # [0.1, 0.25, 0.5, 0.65, 0.75, 1] # pos:neg ratio. TODO: figure out some other day why > 0.65 isn't working
     
     # Define feature counts to test
     feature_counts = [50, 60, 70, 80, 90] #[20, 40, 60, 80, 100]
@@ -473,12 +473,11 @@ def main():
     model_types = [
         'random_forest_complex',
         'nn_complex',
-        'logistic_regression_v1',
         'logistic_regression_v2',
         'gbm',
         'xgboost',
         'svm_rbf',
-        'knn_v1',
+        'svm_poly',
     ]
 
     # TODO: later, look at ensembling techniques
