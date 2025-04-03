@@ -457,6 +457,10 @@ def main():
                         if n_components == -1 and model_type.startswith('nn') and not n_features == -1:
                             print('Skipping non-PCA analysis for full-disk NNs where feature reduction occurs')
                             continue
+
+                        if n_components > n_features:
+                            print(f"Skipping PCA with {n_components} components as it exceeds the number of features {n_features}.")
+                            continue
                             
                         # Lists to store confusion matrices across splits
                         val_cms = []

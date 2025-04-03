@@ -24,6 +24,11 @@ NAME = 'sep_prediction_numeric_data_grid_search2'
 RESULTS_DIR = f'results/numeric_data'
 os.makedirs(RESULTS_DIR, exist_ok=True)
 
+# Number of different dataset splits to use
+NUM_SPLITS = 5
+# Define random seeds for each split
+SPLIT_SEEDS = [42, 123, 456, 789, 1010]
+
 # Set random seed for reproducibility
 random.seed(42)
 np.random.seed(42)
@@ -122,10 +127,6 @@ def evaluate_model(y_true, y_pred, y_pred_proba, set_name=""):
     f1 = f1_score(y_true, y_pred)
     auc = roc_auc_score(y_true, y_pred_proba)
 
-    """
-    HSS = 2 * (TP * TN - FN * FP)/((TP + FN) * (FN + TN) + (TP + FP) * (TN + FP))
-    TSS = TP / (TP + FN) - FP / (FP + TN)
-    """
     # Calculate confusion matrix components
     cm = confusion_matrix(y_true, y_pred)
     TN, FP, FN, TP = cm.ravel()
@@ -156,6 +157,56 @@ def evaluate_model(y_true, y_pred, y_pred_proba, set_name=""):
         'hss': hss,
         'tss': tss,
         'confusion_matrix': cm
+    }
+
+def evaluate_from_combined_confusion_matrix(combined_cm, set_name=""):
+    """
+    Calculate metrics from a combined confusion matrix
+    
+    Args:
+        combined_cm: The combined confusion matrix from multiple splits
+        set_name: Name of the dataset being evaluated
+        
+    Returns:
+        Dictionary of metrics
+    """
+    TN, FP, FN, TP = combined_cm.ravel()
+    
+    # Calculate metrics directly from confusion matrix
+    accuracy = (TP + TN) / (TP + TN + FP + FN)
+    precision = TP / (TP + FP) if (TP + FP) > 0 else 0
+    recall = TP / (TP + FN) if (TP + FN) > 0 else 0
+    f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
+    
+    # Calculate HSS and TSS
+    hss = 2 * (TP * TN - FN * FP) / ((TP + FN) * (FN + TN) + (TP + FP) * (TN + FP))
+    tss = TP / (TP + FN) - FP / (FP + TN) if (TP + FN) > 0 and (FP + TN) > 0 else 0
+    
+    # For AUC, we can't easily compute it from just a confusion matrix without the probabilities
+    # We'll set it to None for now
+    auc = None
+    
+    # Print metrics
+    print(f'{set_name} Results from Combined Confusion Matrix:')
+    print(f'Accuracy: {accuracy:.4f}')
+    print(f'Precision: {precision:.4f}')
+    print(f'Recall: {recall:.4f}')
+    print(f'F1 Score: {f1:.4f}')
+    print(f'HSS: {hss:.4f}')
+    print(f'TSS: {tss:.4f}')
+    print(f'Combined Confusion Matrix:')
+    print(combined_cm)
+    
+    # Return metrics as dictionary
+    return {
+        'accuracy': accuracy,
+        'precision': precision,
+        'recall': recall,
+        'f1': f1,
+        'auc': auc,  # Will be None
+        'hss': hss,
+        'tss': tss,
+        'confusion_matrix': combined_cm
     }
 
 def feature_selection(X_train, y_train, feature_names):
@@ -221,119 +272,38 @@ def feature_selection(X_train, y_train, feature_names):
     # Return indices of features sorted by importance
     return feature_indices
 
-def evaluate_pca_component(X_train, y_train, X_val, y_val, n_features, n_components):
+def load_data(granularity, split_seed):
     """
-    Evaluate a specific PCA component count for a given feature set
+    Load data for a specific granularity and split seed
     
     Args:
-        X_train: Training data with selected features
-        y_train: Training labels
-        X_val: Validation data with selected features
-        y_val: Validation labels
-        n_features: Number of features used
-        n_components: Number of PCA components to test
+        granularity: Data granularity ('per-blob', 'per-disk-4hr', or 'per-disk-1d')
+        split_seed: Random seed for train/test split
         
     Returns:
-        Dictionary with evaluation results
+        X_train, y_train, X_val, y_val, X_test, y_test: Data arrays
     """
-    # Apply PCA
-    pca = PCA(n_components=n_components, random_state=42)
-    X_train_pca = pca.fit_transform(X_train)
-    X_val_pca = pca.transform(X_val)
-    
-    # Calculate variance explained
-    explained_variance = np.sum(pca.explained_variance_ratio_) * 100
-    
-    # Train Random Forest on transformed data
-    rf = RandomForestClassifier(
-        n_estimators=100,
-        max_depth=15,
-        min_samples_split=5,
-        min_samples_leaf=2,
-        random_state=42,
-        n_jobs=cpus_to_use
-    )
-    
-    rf.fit(X_train_pca, y_train)
-    
-    # Make predictions
-    y_pred = rf.predict(X_val_pca)
-    y_pred_proba = rf.predict_proba(X_val_pca)[:, 1]
-    
-    # Calculate metrics
-    metrics = evaluate_model(y_val, y_pred, y_pred_proba)
-    
-    # Return results
-    return {
-        'n_features': n_features,
-        'n_components': n_components,
-        'explained_variance': explained_variance,
-        'metrics': metrics,
-        'pca': pca,
-        'model': rf
-    }
-
-def plot_results(results_df, metric='f1'):
-    """
-    Plot results for different feature counts and PCA components
-    
-    Args:
-        results_df: DataFrame with results
-        metric: Metric to plot (default: f1)
-    """
-    pivot_data = results_df.groupby(['n_components', 'n_features'])[metric].mean().reset_index()
-    
-    # Create pivot table for heatmap
-    pivot_df = pivot_data.pivot(index='n_components', columns='n_features', values=metric)
-    
-    # Plot heatmap
-    plt.figure(figsize=(12, 10))
-    sns.heatmap(pivot_df, annot=True, cmap='viridis', fmt='.4f')
-    plt.title(f'{metric.upper()} Score by Feature Count and PCA Components')
-    plt.xlabel('Number of Features')
-    plt.ylabel('Number of PCA Components')
-    plt.savefig(f'{RESULTS_DIR}/{NAME}_{metric}_heatmap.png', dpi=300)
-    plt.close()
-    
-    # For each feature count, plot metrics vs number of components
-    plt.figure(figsize=(15, 10))
-    feature_counts = results_df['n_features'].unique()
-    
-    for feat_count in feature_counts:
-        # Use the grouped data to plot the lines
-        subset = pivot_data[pivot_data['n_features'] == feat_count]
-        plt.plot(subset['n_components'], subset[metric], marker='o', label=f'{feat_count} features')
-    
-    plt.title(f'{metric.upper()} Score vs PCA Components')
-    plt.xlabel('Number of PCA Components')
-    plt.ylabel(f'{metric.upper()} Score')
-    plt.legend()
-    plt.grid(alpha=0.3)
-    plt.savefig(f'{RESULTS_DIR}/{NAME}_{metric}_by_components.png', dpi=300)
-    plt.close()
-
-def load_data(granularity):
     if granularity == 'per-blob':
-        train_features_file = f'{NAME}_X_train_data_per_blob.npy'
-        train_labels_file = f'{NAME}_y_train_data_per_blob.npy'
-        val_features_file = f'{NAME}_val_data_per_blob.npy'
-        val_labels_file = f'{NAME}_val_labels_per_blob.npy'
-        test_features_file = f'{NAME}_test_data_per_blob.npy'
-        test_labels_file = f'{NAME}_test_labels_per_blob.npy'
+        train_features_file = f'{NAME}_X_train_data_per_blob_split{split_seed}.npy'
+        train_labels_file = f'{NAME}_y_train_data_per_blob_split{split_seed}.npy'
+        val_features_file = f'{NAME}_val_data_per_blob_split{split_seed}.npy'
+        val_labels_file = f'{NAME}_val_labels_per_blob_split{split_seed}.npy'
+        test_features_file = f'{NAME}_test_data_per_blob_split{split_seed}.npy'
+        test_labels_file = f'{NAME}_test_labels_per_blob_split{split_seed}.npy'
     elif granularity == 'per-disk-4hr':
-        train_features_file = f'{NAME}_X_train_data_per_disk_4hr.npy'
-        train_labels_file = f'{NAME}_y_train_data_per_disk_4hr.npy'
-        val_features_file = f'{NAME}_val_data_per_disk_4hr.npy'
-        val_labels_file = f'{NAME}_val_labels_per_disk_4hr.npy'
-        test_features_file = f'{NAME}_test_data_per_disk_4hr.npy'
-        test_labels_file = f'{NAME}_test_labels_per_disk_4hr.npy'
+        train_features_file = f'{NAME}_X_train_data_per_disk_4hr_split{split_seed}.npy'
+        train_labels_file = f'{NAME}_y_train_data_per_disk_4hr_split{split_seed}.npy'
+        val_features_file = f'{NAME}_val_data_per_disk_4hr_split{split_seed}.npy'
+        val_labels_file = f'{NAME}_val_labels_per_disk_4hr_split{split_seed}.npy'
+        test_features_file = f'{NAME}_test_data_per_disk_4hr_split{split_seed}.npy'
+        test_labels_file = f'{NAME}_test_labels_per_disk_4hr_split{split_seed}.npy'
     elif granularity == 'per-disk-1d':
-        train_features_file = f'{NAME}_X_train_data_per_disk_1d.npy'
-        train_labels_file = f'{NAME}_y_train_data_per_disk_1d.npy'
-        val_features_file = f'{NAME}_val_data_per_disk_1d.npy'
-        val_labels_file = f'{NAME}_val_labels_per_disk_1d.npy'
-        test_features_file = f'{NAME}_test_data_per_disk_1d.npy'
-        test_labels_file = f'{NAME}_test_labels_per_disk_1d.npy'
+        train_features_file = f'{NAME}_X_train_data_per_disk_1d_split{split_seed}.npy'
+        train_labels_file = f'{NAME}_y_train_data_per_disk_1d_split{split_seed}.npy'
+        val_features_file = f'{NAME}_val_data_per_disk_1d_split{split_seed}.npy'
+        val_labels_file = f'{NAME}_val_labels_per_disk_1d_split{split_seed}.npy'
+        test_features_file = f'{NAME}_test_data_per_disk_1d_split{split_seed}.npy'
+        test_labels_file = f'{NAME}_test_labels_per_disk_1d_split{split_seed}.npy'
     else:
         raise ValueError(f"Invalid granularity: {granularity}")
     
@@ -359,6 +329,7 @@ def load_data(granularity):
         blob_df['Most Probable AR Num'] = blob_df['Relevant Active Regions'].apply(lambda x: x.strip("[]'").split(',')[0])
         
         # Split the data by year to maintain the same structure as in the original scripts
+        # But use the provided split_seed for reproducibility
         years = blob_df['Year'].unique()
         train_df = pd.DataFrame()
         val_df = pd.DataFrame()
@@ -394,12 +365,12 @@ def load_data(granularity):
             if grouped_train[grouped_train == 1].count() == 1:
                 min_train_regions = grouped_train[grouped_train == 1].index
                 remaining_train_regions, val_regions = train_test_split(
-                    grouped_train[grouped_train == 0].index, test_size=0.25, random_state=42
+                    grouped_train[grouped_train == 0].index, test_size=0.25, random_state=split_seed
                 )
                 train_regions = np.concatenate([min_train_regions, remaining_train_regions])
             else:
                 train_regions, val_regions = train_test_split(
-                    grouped_train.index, test_size=0.25, stratify=grouped_train, random_state=42
+                    grouped_train.index, test_size=0.25, stratify=grouped_train, random_state=split_seed
                 )
         
             new_train_from_year = train_from_year[train_from_year['Most Probable AR Num'].isin(train_regions)]
@@ -429,7 +400,7 @@ def load_data(granularity):
         X_val, y_val = extract_all_data(val_generator)
         X_test, y_test = extract_all_data(test_generator)
 
-        # Save the data
+        # Save the data with split_seed in filename
         np.save(train_features_file, X_train)
         np.save(train_labels_file, y_train)
 
@@ -441,35 +412,16 @@ def load_data(granularity):
 
     return X_train, y_train, X_val, y_val, X_test, y_test
 
-def load_model(model_file):
-    """
-    Load a model from a file
-    
-    Args:
-        model_file: File path to the model
-    
-    Returns:
-        Model object
-    """
-    return joblib.load(model_file)
-
 def main():
-    """Main function to run the combined feature selection and PCA analysis"""
+    """Main function to run the grid search with multiple splits"""
     start_time = time.time()
-    print(f"Starting combined feature selection and PCA analysis at {time.ctime()}")
+    print(f"Starting numeric data grid search with multiple splits at {time.ctime()}")
 
-    # granularities = ['per-blob', 'per-disk-4hr', 'per-disk-1d'] # ['per-blob', 'per-disk-4hr', 'per-disk-1d']
     granularities = ['per-disk-4hr']
-
-    oversampling_ratios = [0.5, 0.6, 0.7, 0.8, 0.9, 1] # [0.1, 0.25, 0.5, 0.65, 0.75, 1] # pos:neg ratio. TODO: figure out some other day why > 0.65 isn't working
+    oversampling_ratios = [0.5, 0.6, 0.7, 0.8, 0.9, 1]
+    feature_counts = [30, 40, 50, 60, 70]
+    component_counts = [-1]
     
-    # Define feature counts to test
-    feature_counts = [30, 40, 50, 60, 70] #[20, 40, 60, 80, 100]
-    
-    # Define component counts to test for PCA
-    component_counts = [-1] #[-1, 2, 3, 5, 10, 15, 20, 25, 30, 40, 50]
-
-    # Model files
     model_types = [
         'random_forest_complex',
         'nn_complex',
@@ -480,14 +432,8 @@ def main():
         'svm_poly',
     ]
 
-    # TODO: later, look at ensembling techniques
-    
     # Create a list to store all results
     all_results = []
-    # best_f1 = 0
-    # best_config = None
-    # best_model = None
-    # best_pca = None
 
     for model_type in model_types:
         print('\n' + '-'*50)
@@ -498,212 +444,285 @@ def main():
             print('\n' + '-'*50)
             print(f'\nEvaluating granularity: {granularity}')
             print('-'*50)
+            
             # Build feature names for interpretation
             feature_names = build_feature_names(granularity)
-
-            # Load the data
-            X_train_OG, y_train_OG, X_val, y_val, X_test, y_test = load_data(granularity)
-
-            # Check for NaN and Inf values
-            print('\nChecking for NaN and Inf values:')
-            print(f'Train NaN count: {np.isnan(X_train_OG).sum()}, Inf count: {np.isinf(X_train_OG).sum()}')
-            print(f'Val NaN count: {np.isnan(X_val).sum()}, Inf count: {np.isinf(X_val).sum()}')
-            print(f'Test NaN count: {np.isnan(X_test).sum()}, Inf count: {np.isinf(X_test).sum()}')
-            
-            # Replace any NaN or Inf values with 0. NOTE: This code should never change the data since there are no NaNs.
-            X_train_OG = np.nan_to_num(X_train_OG, nan=0.0, posinf=0.0, neginf=0.0)
-            X_val = np.nan_to_num(X_val, nan=0.0, posinf=0.0, neginf=0.0)
-            X_test = np.nan_to_num(X_test, nan=0.0, posinf=0.0, neginf=0.0)
-
-            # Standardize the features
-            scaler = StandardScaler()
-            X_train_OG = scaler.fit_transform(X_train_OG)
-            X_val = scaler.transform(X_val)
-            X_test = scaler.transform(X_test)
 
             for oversampling_ratio in oversampling_ratios:
                 print('\n' + '-'*50)
                 print(f'\nEvaluating oversampling ratio: {oversampling_ratio}')
                 print('-'*50)
-            
-                # Apply class balancing to training set
-                print('\nBefore resampling:')
-                print('Train set count:', len(X_train_OG))
-                print('Train set SEP count:', np.sum(y_train_OG))
-
-                # if oversampling ratio is less than or equal to the current ratio, skip
-                if oversampling_ratio <= np.sum(y_train_OG) / len(y_train_OG):
-                    print(f"Skipping oversampling ratio {oversampling_ratio} as positive class already significant enough.")
-                    continue
                 
-                # Over-sample minority class
-                ros = RandomOverSampler(sampling_strategy=oversampling_ratio/2, random_state=42)
-                X_train, y_train = ros.fit_resample(X_train_OG, y_train_OG)
-                
-                # Under-sample majority class
-                rus = RandomUnderSampler(sampling_strategy=oversampling_ratio, random_state=42)
-                X_train, y_train = rus.fit_resample(X_train, y_train)
-
-                # Reshuffle the data
-                X_train, y_train = shuffle(X_train, y_train, random_state=42)
-                
-                print('After resampling:')
-                print('Train set count:', len(X_train))
-                print('Train set SEP count:', np.sum(y_train))
-                
-                # Print dataset statistics
-                print('\nDataset Statistics:')
-                print(f'Train set size: {len(X_train)}, SEP events: {np.sum(y_train)} ({np.mean(y_train)*100:.2f}%)')
-                print(f'Validation set size: {len(X_val)}, SEP events: {np.sum(y_val)} ({np.mean(y_val)*100:.2f}%)')
-                print(f'Test set size: {len(X_test)}, SEP events: {np.sum(y_test)} ({np.mean(y_test)*100:.2f}%)')
-                print(f'Number of features: {X_train.shape[1]}')
-
-                # Run feature selection
-                feature_indices = feature_selection(X_train, y_train, feature_names)
-                features = [feature_names[i] for i in feature_indices]
-                
-                # Loop through different feature counts
+                # For each feature count
                 for n_features in feature_counts:
-                    if n_features == -1:
-                        print('Skipping feature selection...')
-                        n_features = len(feature_indices)
-
-                    if n_features > len(feature_indices):
-                        if -1 in feature_counts:
-                            print('Already using all features, skipping...')
-                            continue
-                        else:
-                            print(f"Warning: Requested {n_features} features, but only {len(feature_indices)} available. Using all available features.")
-                            n_features = len(feature_indices)
+                    print('\n' + '-'*50)
+                    print(f'\nEvaluating feature count: {n_features}')
+                    print('-'*50)
                     
-                    # Get the top n features
-                    selected_indices = feature_indices[:n_features]
-                    
-                    # Extract data with selected features
-                    X_train_selected = X_train[:, selected_indices]
-                    X_val_selected = X_val[:, selected_indices]
-                    X_test_selected = X_test[:, selected_indices]
-                    
-                    print(f"\nEvaluating top {n_features} features...")
-                    
-                    # Define valid component counts based on number of features
-                    valid_components = [c for c in component_counts if c <= min(n_features, X_train_selected.shape[0])]
-                    
-                    # Loop through different PCA component counts
-                    for n_components in valid_components:
+                    # For each PCA component count
+                    for n_components in component_counts:
+                        print('\n' + '-'*50)
+                        print(f'\nEvaluating component count: {n_components}')
+                        print('-'*50)
+                        
+                        # Skip invalid combinations
                         if granularity == 'per-blob' and n_components == -1:
                             print('Skipping non-PCA analysis for per-blob granularity...')
                             continue
 
-                        # now, if n_components == -1, then it must be that granularity is full-disk
                         if n_components == -1 and model_type.startswith('nn') and not n_features == -1:
                             print('Skipping non-PCA analysis for full-disk NNs where feature reduction occurs')
                             continue
+                    
+                        if n_components > n_features:
+                            print(f"Skipping PCA with {n_components} components as it exceeds the number of features {n_features}.")
+                            continue
+                            
+                        # Lists to store confusion matrices across splits
+                        val_cms = []
+                        test_cms = []
+                        
+                        # Train and evaluate models for each split
+                        for split_idx, split_seed in enumerate(SPLIT_SEEDS):
+                            print('\n' + '-'*50)
+                            print(f'\nTraining on split {split_idx+1}/{len(SPLIT_SEEDS)} with seed {split_seed}')
+                            print('-'*50)
+                            
+                            # Define model name with split information
+                            model_name = f"{NAME}_{granularity}_{oversampling_ratio}_{model_type}_{n_features}_{n_components}_split{split_seed}"
+                            
+                            # Load the data for this split
+                            X_train_OG, y_train_OG, X_val, y_val, X_test, y_test = load_data(granularity, split_seed)
 
-                        print('\n' + '-'*50)
-                        print(f'Feature Count: {n_features}, PCA Components: {n_components}')
-                        if n_components == -1:
-                            print('Skipping PCA...')
-                        print('-'*50)
+                            # Check for NaN and Inf values
+                            print('\nChecking for NaN and Inf values:')
+                            print(f'Train NaN count: {np.isnan(X_train_OG).sum()}, Inf count: {np.isinf(X_train_OG).sum()}')
+                            print(f'Val NaN count: {np.isnan(X_val).sum()}, Inf count: {np.isinf(X_val).sum()}')
+                            print(f'Test NaN count: {np.isnan(X_test).sum()}, Inf count: {np.isinf(X_test).sum()}')
+                            
+                            # Replace any NaN or Inf values with 0
+                            X_train_OG = np.nan_to_num(X_train_OG, nan=0.0, posinf=0.0, neginf=0.0)
+                            X_val = np.nan_to_num(X_val, nan=0.0, posinf=0.0, neginf=0.0)
+                            X_test = np.nan_to_num(X_test, nan=0.0, posinf=0.0, neginf=0.0)
 
-                        # time model loading
-                        if model_type == 'isolation_forest':
-                            percent_pos = np.sum(y_train) / len(y_train)
-                            model = ModelConstructor.create_model('numeric', model_type, granularity, n_components, contamination=percent_pos)
-                        else:
-                            model = ModelConstructor.create_model('numeric', model_type, granularity, n_components)
+                            # Standardize the features
+                            scaler = StandardScaler()
+                            X_train_OG = scaler.fit_transform(X_train_OG)
+                            X_val = scaler.transform(X_val)
+                            X_test = scaler.transform(X_test)
+                            
+                            # Apply resampling if needed
+                            # Apply class balancing to training set
+                            print('\nBefore resampling:')
+                            print('Train set count:', len(X_train_OG))
+                            print('Train set SEP count:', np.sum(y_train_OG))
 
-                        if n_components != -1:
-                            # Apply PCA
-                            pca = PCA(n_components=n_components, random_state=42)
-                            X_train_pca = pca.fit_transform(X_train_selected)
-                            X_val_pca = pca.transform(X_val_selected)
-                        
-                            # Calculate variance explained
-                            explained_variance = np.sum(pca.explained_variance_ratio_) * 100
-                        else:
-                            pca = None
-                            X_train_pca = X_train_selected
-                            X_val_pca = X_val_selected
-                            explained_variance = 100
-                        
-                        # time model training
-                        train_start = time.time()
-                        model.fit(X_train_pca, y_train)
-                        train_end = time.time()
-                        print(f'Model {model_type} trained in {train_end - train_start:.2f} seconds')
-                        
-                        # Make predictions
-                        if model_type == 'isolation_forest':
-                            # y_pred is 1 for inliers, -1 for outliers, but we want
-                            # 1 for outliers and 0 for inliers
-                            y_pred = model.predict(X_val_pca)
-                            y_pred[y_pred == 1] = 0
-                            y_pred[y_pred == -1] = 1
-                        elif model_type == 'nn_simple' or model_type == 'nn_complex':
-                            y_pred_proba = model.predict(X_val_pca)
-                            # Assume 0.5 threshold for now, prob need to optimize over too
-                            y_pred = (y_pred_proba > 0.5).astype(int)
-                        else:
-                            y_pred = model.predict(X_val_pca)
+                            # if oversampling ratio is less than or equal to the current ratio, skip this configuration
+                            if oversampling_ratio <= np.sum(y_train_OG) / len(y_train_OG):
+                                print(f"Skipping oversampling ratio {oversampling_ratio} as positive class already significant enough.")
+                                continue
+                            
+                            # Over-sample minority class
+                            ros = RandomOverSampler(sampling_strategy=oversampling_ratio/2, random_state=split_seed)
+                            X_train, y_train = ros.fit_resample(X_train_OG, y_train_OG)
+                            
+                            # Under-sample majority class
+                            rus = RandomUnderSampler(sampling_strategy=oversampling_ratio, random_state=split_seed)
+                            X_train, y_train = rus.fit_resample(X_train, y_train)
 
-                        if model_type == 'isolation_forest':
-                            anomaly_scores = model.decision_function(X_val_pca)
-                            y_pred_proba = (anomaly_scores - np.min(anomaly_scores)) / (np.max(anomaly_scores) - np.min(anomaly_scores))
-                        elif model_type == 'nn_simple' or model_type == 'nn_complex':
-                            pass # already calculated
-                        else:
-                            y_pred_proba = model.predict_proba(X_val_pca)[:, 1]
+                            # Reshuffle the data
+                            X_train, y_train = shuffle(X_train, y_train, random_state=split_seed)
+                            
+                            print('After resampling:')
+                            print('Train set count:', len(X_train))
+                            print('Train set SEP count:', np.sum(y_train))
+                            
+                            # Run feature selection
+                            feature_indices = feature_selection(X_train, y_train, feature_names)
+                            selected_features = [feature_names[i] for i in feature_indices]
+                            
+                            # Check if we have enough features
+                            if n_features == -1:
+                                print('Using all features...')
+                                n_features = len(feature_indices)
+
+                            if n_features > len(feature_indices):
+                                if -1 in feature_counts:
+                                    print('Already using all features, skipping...')
+                                    continue
+                                else:
+                                    print(f"Warning: Requested {n_features} features, but only {len(feature_indices)} available. Using all available features.")
+                                    n_features = len(feature_indices)
+                            
+                            # Get the top n features
+                            selected_indices = feature_indices[:n_features]
+                            
+                            # Extract data with selected features
+                            X_train_selected = X_train[:, selected_indices]
+                            X_val_selected = X_val[:, selected_indices]
+                            X_test_selected = X_test[:, selected_indices]
+                            
+                            # Apply PCA if needed
+                            if n_components != -1:
+                                # Make sure n_components doesn't exceed the number of features or samples
+                                n_components_actual = min(n_components, min(n_features, X_train_selected.shape[0]))
+                                
+                                # Apply PCA
+                                pca = PCA(n_components=n_components_actual, random_state=split_seed)
+                                X_train_pca = pca.fit_transform(X_train_selected)
+                                X_val_pca = pca.transform(X_val_selected)
+                                X_test_pca = pca.transform(X_test_selected)
+                                
+                                # Calculate variance explained
+                                explained_variance = np.sum(pca.explained_variance_ratio_) * 100
+                            else:
+                                pca = None
+                                X_train_pca = X_train_selected
+                                X_val_pca = X_val_selected
+                                X_test_pca = X_test_selected
+                                explained_variance = 100
+                            
+                            # Create the model
+                            if model_type == 'isolation_forest':
+                                percent_pos = np.sum(y_train) / len(y_train)
+                                model = ModelConstructor.create_model('numeric', model_type, granularity, n_components, contamination=percent_pos)
+                            else:
+                                model = ModelConstructor.create_model('numeric', model_type, granularity, n_components)
+                            
+                            # Train the model
+                            train_start = time.time()
+                            model.fit(X_train_pca, y_train)
+                            train_end = time.time()
+                            print(f'Model {model_type} trained in {train_end - train_start:.2f} seconds for split {split_idx+1}')
+                            
+                            # Make predictions on validation set
+                            if model_type == 'isolation_forest':
+                                # y_pred is 1 for inliers, -1 for outliers, but we want
+                                # 1 for outliers and 0 for inliers
+                                y_val_pred = model.predict(X_val_pca)
+                                y_val_pred[y_val_pred == 1] = 0
+                                y_val_pred[y_val_pred == -1] = 1
+                                
+                                anomaly_scores = model.decision_function(X_val_pca)
+                                y_val_pred_proba = (anomaly_scores - np.min(anomaly_scores)) / (np.max(anomaly_scores) - np.min(anomaly_scores))
+                            elif model_type == 'nn_simple' or model_type == 'nn_complex':
+                                y_val_pred_proba = model.predict(X_val_pca)
+                                # Assume 0.5 threshold for now
+                                y_val_pred = (y_val_pred_proba > 0.5).astype(int)
+                            else:
+                                y_val_pred = model.predict(X_val_pca)
+                                y_val_pred_proba = model.predict_proba(X_val_pca)[:, 1]
+                            
+                            # Get validation confusion matrix for this split
+                            val_cm = confusion_matrix(y_val, y_val_pred)
+                            val_cms.append(val_cm)
+                            
+                            print(f"Validation confusion matrix for split {split_idx+1}:")
+                            print(val_cm)
+                            
+                            # Make predictions on test set
+                            if model_type == 'isolation_forest':
+                                y_test_pred = model.predict(X_test_pca)
+                                y_test_pred[y_test_pred == 1] = 0
+                                y_test_pred[y_test_pred == -1] = 1
+                                
+                                anomaly_scores = model.decision_function(X_test_pca)
+                                y_test_pred_proba = (anomaly_scores - np.min(anomaly_scores)) / (np.max(anomaly_scores) - np.min(anomaly_scores))
+                            elif model_type == 'nn_simple' or model_type == 'nn_complex':
+                                y_test_pred_proba = model.predict(X_test_pca)
+                                y_test_pred = (y_test_pred_proba > 0.5).astype(int)
+                            else:
+                                y_test_pred = model.predict(X_test_pca)
+                                y_test_pred_proba = model.predict_proba(X_test_pca)[:, 1]
+                            
+                            # Get test confusion matrix for this split
+                            test_cm = confusion_matrix(y_test, y_test_pred)
+                            test_cms.append(test_cm)
+                            
+                            print(f"Test confusion matrix for split {split_idx+1}:")
+                            print(test_cm)
+                            
+                            # Save the model, scaler, pca, and feature indices for this split
+                            split_model_data = {
+                                'model': model,
+                                'scaler': scaler,
+                                'pca': pca,
+                                'feature_indices': selected_indices,
+                                'feature_names': selected_features[:n_features],
+                                'val_cm': val_cm,
+                                'test_cm': test_cm
+                            }
+                            
+                            joblib.dump(split_model_data, f'{RESULTS_DIR}/{model_name}_model_data.joblib')
                         
-                        # Calculate metrics
-                        metrics = evaluate_model(y_val, y_pred, y_pred_proba, "Validation")
+                        # End of loop for splits
                         
-                        # Extract metrics to store in results list
-                        # TODO: Update this and later with all selected hyperparameters
+                        # Skip this configuration if we didn't get results for all splits
+                        if len(val_cms) < len(SPLIT_SEEDS) or len(test_cms) < len(SPLIT_SEEDS):
+                            print(f"Skipping configuration due to incomplete splits: {model_type}, {granularity}, {oversampling_ratio}, {n_features}, {n_components}")
+                            # This is actually due to skipping oversampling ratio that is too low relative to current balance, which
+                            # is possible for a given split. But likely if one split fails, all will fail. So we'll just skip the entire
+                            # config with this oversampling ratio.
+                            continue
+                        
+                        # Combine confusion matrices across all splits
+                        combined_val_cm = np.sum(np.array(val_cms), axis=0)
+                        combined_test_cm = np.sum(np.array(test_cms), axis=0)
+                        
+                        print("\nCombined validation confusion matrix across all splits:")
+                        print(combined_val_cm)
+                        
+                        print("\nCombined test confusion matrix across all splits:")
+                        print(combined_test_cm)
+                        
+                        # Calculate metrics using the combined confusion matrices
+                        val_metrics = evaluate_from_combined_confusion_matrix(combined_val_cm, "Validation (Combined)")
+                        
+                        # Store this configuration's results
                         result_row = {
                             'granularity': granularity,
-                            'scaler': scaler,
+                            'model_type': model_type,
                             'oversampling_ratio': oversampling_ratio,
                             'n_features': n_features,
-                            'feature_indices': selected_indices,
-                            'feature_names': features,
                             'n_components': n_components,
-                            'pca': pca,
-                            'model_type': model_type,
-                            'model': model,
-                            'explained_variance': explained_variance,
-                            'accuracy': metrics['accuracy'],
-                            'precision': metrics['precision'],
-                            'recall': metrics['recall'],
-                            'f1': metrics['f1'],
-                            'auc': metrics['auc'],
-                            'hss': metrics['hss'],
-                            'tss': metrics['tss'],
+                            'accuracy': val_metrics['accuracy'],
+                            'precision': val_metrics['precision'],
+                            'recall': val_metrics['recall'],
+                            'f1': val_metrics['f1'],
+                            'hss': val_metrics['hss'],
+                            'tss': val_metrics['tss'],
+                            'combined_val_cm': combined_val_cm,
+                            'combined_test_cm': combined_test_cm,
+                            'split_seeds': SPLIT_SEEDS,
+                            'selected_features': selected_features[:n_features],
+                            'explained_variance': explained_variance
                         }
                         
                         all_results.append(result_row)
-
-                        # Save current state of all_results
-                        results_df = pd.DataFrame(all_results)
+                        
+                        # Save intermediate results (excluding numpy arrays)
+                        results_df = pd.DataFrame([{k: v for k, v in row.items() if not isinstance(v, np.ndarray)} 
+                                                 for row in all_results])
                         results_df.to_csv(f'{RESULTS_DIR}/{NAME}_all_results_so_far.csv', index=False)
     
-    # Convert results to DataFrame
-    results_df = pd.DataFrame(all_results)
+    # Convert results to DataFrame, excluding numpy arrays and lists
+    results_df = pd.DataFrame([{k: v for k, v in row.items() if not isinstance(v, np.ndarray)} 
+                             for row in all_results])
     
     # Save results
     results_df.to_csv(f'{RESULTS_DIR}/{NAME}_all_results.csv', index=False)
     
-    # Plot results
-    plot_results(results_df, 'f1')
-    plot_results(results_df, 'accuracy')
-    plot_results(results_df, 'precision')
-    plot_results(results_df, 'recall')
-    plot_results(results_df, 'auc')
-    plot_results(results_df, 'hss')
-    plot_results(results_df, 'tss')
+    # Save complete results including confusion matrices
+    joblib.dump(all_results, f'{RESULTS_DIR}/{NAME}_all_results_with_cms.joblib')
 
-    # Get best configuration
-    best_config = results_df.loc[results_df['f1'].idxmax()].to_dict()
+    if len(all_results) == 0:
+        print("No valid results found. Exiting.")
+        return
+        
+    # Get best configuration based on F1 score
+    best_idx = results_df['f1'].idxmax()
+    best_config = results_df.loc[best_idx].to_dict()
+    best_complete_config = all_results[best_idx]
     
     # Print best configuration
     print("\nBest Configuration:")
@@ -711,72 +730,62 @@ def main():
     print(f"Granularity: {best_config['granularity']}")
     print(f"Oversampling Ratio: {best_config['oversampling_ratio']}")
     print(f"Number of Features: {best_config['n_features']}")
-    print(f"Best features: {best_config['feature_names']}")
+    print(f"Selected Features: {best_config['selected_features']}")
     print(f"Number of PCA Components: {best_config['n_components']}")
     print(f"F1 Score: {best_config['f1']:.4f}")
     print(f"Accuracy: {best_config['accuracy']:.4f}")
     print(f"Precision: {best_config['precision']:.4f}")
     print(f"Recall: {best_config['recall']:.4f}")
-    print(f"AUC: {best_config['auc']:.4f}")
     print(f"HSS: {best_config['hss']:.4f}")
     print(f"TSS: {best_config['tss']:.4f}")
     
-    # Save best feature indices
-    best_feature_names = best_config['feature_names']
-    pd.DataFrame({'Feature': best_feature_names}).to_csv(f'{RESULTS_DIR}/{NAME}_best_features.csv', index=False)
+    # Use the combined test confusion matrix to evaluate the best model
+    combined_test_cm = best_complete_config['combined_test_cm']
+    test_metrics = evaluate_from_combined_confusion_matrix(combined_test_cm, "Test (Combined)")
     
-    # Now, evaluate the best model on the test set
-    print("\nEvaluating best model on test set...")
+    # Get model names for the best configuration across all splits
+    best_model_names = []
+    for split_seed in SPLIT_SEEDS:
+        best_model_names.append(f"{NAME}_{best_config['granularity']}_{best_config['oversampling_ratio']}_{best_config['model_type']}_{best_config['n_features']}_{best_config['n_components']}_split{split_seed}")
     
-    # Get the best configuration's selected features
-    _, _, _, _, X_test, y_test = load_data(best_config['granularity'])
-    X_test = best_config['scaler'].transform(X_test)
-    X_test_selected = X_test[:, best_config['feature_indices']]
-    
-    # Apply PCA transformation
-    if best_config['n_components'] == -1:
-        X_test_pca = X_test_selected
-    else:
-        X_test_pca = best_config['pca'].transform(X_test_selected)
-    
-    # Make predictions
-    y_test_pred = best_config['model'].predict(X_test_pca)
-    y_test_pred_proba = best_config['model'].predict_proba(X_test_pca)[:, 1]
-    
-    # Evaluate performance
-    test_metrics = evaluate_model(y_test, y_test_pred, y_test_pred_proba, "Test")
-    
-    # Save the best model, PCA transformer, and feature indices
+    # Save the best configuration metadata
     model_metadata = {
         'model_type': best_config['model_type'],
         'granularity': best_config['granularity'],
         'oversampling_ratio': best_config['oversampling_ratio'],
-        'feature_indices': best_config['feature_indices'],
-        'feature_names': best_feature_names,
+        'n_features': best_config['n_features'],
         'n_components': best_config['n_components'],
-        'train_metrics': {
+        'explained_variance': best_config['explained_variance'],
+        'validation_metrics': {
             'accuracy': best_config['accuracy'],
             'precision': best_config['precision'],
             'recall': best_config['recall'],
             'f1': best_config['f1'],
-            'auc': best_config['auc'],
             'hss': best_config['hss'],
             'tss': best_config['tss'],
+            'confusion_matrix': best_complete_config['combined_val_cm'].tolist()
         },
-        'test_metrics': test_metrics,
+        'test_metrics': {
+            'accuracy': test_metrics['accuracy'],
+            'precision': test_metrics['precision'],
+            'recall': test_metrics['recall'],
+            'f1': test_metrics['f1'],
+            'hss': test_metrics['hss'],
+            'tss': test_metrics['tss'],
+            'confusion_matrix': best_complete_config['combined_test_cm'].tolist()
+        },
+        'model_paths': best_model_names,
+        'split_seeds': SPLIT_SEEDS
     }
     
-    # Save model and metadata
-    joblib.dump(best_config['model'], f'{RESULTS_DIR}/{NAME}_best_model.joblib')
-    joblib.dump(best_config['pca'], f'{RESULTS_DIR}/{NAME}_best_pca.joblib')
-    joblib.dump(best_config['scaler'], f'{RESULTS_DIR}/{NAME}_best_scaler.job')
-    joblib.dump(model_metadata, f'{RESULTS_DIR}/{NAME}_metadata.joblib')
+    # Save metadata
+    joblib.dump(model_metadata, f'{RESULTS_DIR}/{NAME}_best_model_metadata.joblib')
     
-    print(f"\nBest model and metadata saved to {RESULTS_DIR}/ directory")
+    print(f"\nBest model configuration and metadata saved to {RESULTS_DIR}/ directory")
     
     # Calculate total runtime
     total_time = time.time() - start_time
-    print(f'\nAnalysis completed in {total_time:.2f} seconds ({total_time/60:.2f} minutes)')
+    print(f'\nAnalysis completed in {total_time:.2f} seconds ({total_time/60:.2f} minutes, {total_time/3600:.2f} hours)')
 
 if __name__ == "__main__":
     main()
