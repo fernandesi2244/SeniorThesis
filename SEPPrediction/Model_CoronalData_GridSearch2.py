@@ -658,7 +658,7 @@ def main():
                                 'test_cm': test_cm
                             }
                             
-                            joblib.dump(split_model_data, f'{RESULTS_DIR}/{model_name}_model_data.joblib')
+                            # joblib.dump(split_model_data, f'{RESULTS_DIR}/{model_name}_model_data.joblib')
                         
                         # End of loop for splits
                         
