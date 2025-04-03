@@ -108,6 +108,7 @@ def evaluate_model(y_true, y_pred, y_pred_proba, set_name=""):
     print(f'TSS: {tss:.4f}')
     print(f'Confusion Matrix:')
     print(cm)
+    print(f'TN: {TN}, FP: {FP}, FN: {FN}, TP: {TP}')
     
     # Return metrics as dictionary
     return {
@@ -118,7 +119,11 @@ def evaluate_model(y_true, y_pred, y_pred_proba, set_name=""):
         'auc': auc,
         'hss': hss,
         'tss': tss,
-        'confusion_matrix': cm
+        'confusion_matrix': cm,
+        'TN': TN,
+        'FP': FP,
+        'FN': FN,
+        'TP': TP
     }
 
 def load_data(granularity):
@@ -465,6 +470,10 @@ def main():
                     'auc': metrics['auc'],
                     'hss': metrics['hss'],
                     'tss': metrics['tss'],
+                    'TN': metrics['TN'],
+                    'FP': metrics['FP'],
+                    'FN': metrics['FN'],
+                    'TP': metrics['TP'],
                     'test_loader': test_generator,
                     'test_labels': y_test,
                 }
@@ -496,6 +505,7 @@ def main():
     print(f"AUC: {best_config['auc']:.4f}")
     print(f"HSS: {best_config['hss']:.4f}")
     print(f"TSS: {best_config['tss']:.4f}")
+    print(f"TN: {best_config['TN']}, FP: {best_config['FP']}, FN: {best_config['FN']}, TP: {best_config['TP']}")
     
     # Now, evaluate the best model on the test set
     print("\nEvaluating best model on test set...")
@@ -523,6 +533,10 @@ def main():
             'auc': best_config['auc'],
             'hss': best_config['hss'],
             'tss': best_config['tss'],
+            'TN': best_config['TN'],
+            'FP': best_config['FP'],
+            'FN': best_config['FN'],
+            'TP': best_config['TP'],
         },
         'test_metrics': test_metrics,
     }
