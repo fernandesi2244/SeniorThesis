@@ -401,17 +401,20 @@ def main():
 
     granularities = ['per-disk-4hr']
     oversampling_ratios = [0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8]
-    feature_counts = [50, 60, 70, 80, 90]
+    feature_counts = [-1] #[50, 60, 70, 80, 90]
     component_counts = [-1]
     
+    # model_types = [
+    #     'random_forest_complex',
+    #     'nn_complex',
+    #     'logistic_regression_v2',
+    #     'gbm',
+    #     'xgboost',
+    #     'svm_rbf',
+    #     'svm_poly',
+    # ]
     model_types = [
-        'random_forest_complex',
         'nn_complex',
-        'logistic_regression_v2',
-        'gbm',
-        'xgboost',
-        'svm_rbf',
-        'svm_poly',
     ]
 
     # TODO: Look at ensembling techniques
@@ -454,11 +457,11 @@ def main():
                             print('Skipping non-PCA analysis for per-blob granularity...')
                             continue
 
-                        if n_components == -1 and model_type.startswith('nn') and not n_features == -1:
+                        if n_components == -1 and granularity.startswith('per-disk') and model_type.startswith('nn') and n_features != -1:
                             print('Skipping non-PCA analysis for full-disk NNs where feature reduction occurs')
                             continue
 
-                        if n_components > n_features:
+                        if n_features != -1 and n_components > n_features:
                             print(f"Skipping PCA with {n_components} components as it exceeds the number of features {n_features}.")
                             continue
                             

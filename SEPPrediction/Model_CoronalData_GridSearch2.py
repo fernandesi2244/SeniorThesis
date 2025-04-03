@@ -419,11 +419,10 @@ def main():
 
     granularities = ['per-disk-4hr']
     oversampling_ratios = [0.3, 0.4, 0.5, 0.6, 0.7]
-    feature_counts = [55, 60, 65, 70]
+    feature_counts = [-1, 55, 60, 65, 70]
     component_counts = [-1, 5, 7, 9, 11]
     
     model_types = [
-        'random_forest_complex',
         'nn_simple',
         'logistic_regression_v2',
         'gbm',
@@ -456,6 +455,10 @@ def main():
                     print('\n' + '-'*50)
                     print(f'\nEvaluating feature count: {n_features}')
                     print('-'*50)
+
+                    if granularity.startswith('per-disk') and n_features == -1 and not model_type.startswith('nn'):
+                        print('Only care about no feature reduction for NN case')
+                        continue
                     
                     # For each PCA component count
                     for n_components in component_counts:
@@ -468,11 +471,15 @@ def main():
                             print('Skipping non-PCA analysis for per-blob granularity...')
                             continue
 
-                        if n_components == -1 and model_type.startswith('nn') and not n_features == -1:
+                        if granularity.startswith('per-disk') and model_type.startswith('nn') and n_components != -1:
+                            print('Skipping PCA analysis for full-disk NNs...')
+                            continue
+
+                        if n_components == -1 and granularity.startswith('per-disk') and model_type.startswith('nn') and not n_features == -1:
                             print('Skipping non-PCA analysis for full-disk NNs where feature reduction occurs')
                             continue
                             
-                        if n_components > n_features:
+                        if n_features != -1 and n_components > n_features:
                             print(f"Skipping PCA with {n_components} components as it exceeds the number of features {n_features}.")
                             continue
                             
