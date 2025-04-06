@@ -548,8 +548,8 @@ def main():
                 print('Train set count:', len(X_train_OG))
                 print('Train set SEP count:', np.sum(y_train_OG))
 
-                # if oversampling ratio is less than or equal to the current ratio, skip
-                if oversampling_ratio <= np.sum(y_train_OG) / len(y_train_OG):
+                # if oversampling ratio is less than or equal to the current ratio, skip. note that oversampling ratio is pos : neg
+                if oversampling_ratio <= np.sum(y_train_OG) / (len(y_train_OG) - np.sum(y_train_OG)):
                     print(f"Skipping oversampling ratio {oversampling_ratio} as positive class already significant enough.")
                     continue
                 
