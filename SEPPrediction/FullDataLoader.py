@@ -1,12 +1,3 @@
-"""
-In a style similar to the data sequence mechanism used in NextFramePrediction/NextFramePrediction_FinalModel.py,
-create a data mechanism for the SEPPrediction model. Each data sample should consist of:
-- The x, y, and z components of the magnetic field volume for a given blob.
-- The corresponding vector of data for the blob from the unified 2D/3D dataset.
-- The corresponding vectors of data for the same blob and dataset but for the previous 5 time steps (t-4, t-8, t-12, t-16, t-20).
-- The class label for the blob, which is whether or not an SEP event occurred within 24 hours of the current time step.
-"""
-
 import pandas as pd
 import numpy as np
 import os

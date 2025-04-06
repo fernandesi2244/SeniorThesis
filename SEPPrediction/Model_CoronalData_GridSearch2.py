@@ -68,7 +68,7 @@ def build_feature_names(granularity):
         feature_names = list(SEPInputDataGenerator.BLOB_ONE_TIME_INFO)
 
         # Time-series features for top 5 disk blobs and their previous 5 time steps
-        for i in range(1, 6):
+        for i in range(1, SEPInputDataGenerator.TOP_N_BLOBS + 1):
             for t in range(SEPInputDataGenerator.TIMESERIES_STEPS):
                 for col in SEPInputDataGenerator.BLOB_VECTOR_COLUMNS_GENERAL:
                     if t == 0:
@@ -475,7 +475,7 @@ def main():
                             print('Skipping PCA analysis for full-disk NNs...')
                             continue
 
-                        if n_components == -1 and granularity.startswith('per-disk') and model_type.startswith('nn') and not n_features == -1:
+                        if n_components == -1 and granularity.startswith('per-disk') and model_type.startswith('nn') and n_features != -1:
                             print('Skipping non-PCA analysis for full-disk NNs where feature reduction occurs')
                             continue
                             
