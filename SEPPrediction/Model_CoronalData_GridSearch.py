@@ -778,7 +778,7 @@ def main():
     }
     
     # Save model and metadata
-    joblib.dump(best_config['model'], f'{RESULTS_DIR}/{NAME}_best_model.joblib')
+    # joblib.dump(best_config['model'], f'{RESULTS_DIR}/{NAME}_best_model.joblib')
     joblib.dump(best_config['pca'], f'{RESULTS_DIR}/{NAME}_best_pca.joblib')
     joblib.dump(best_config['scaler'], f'{RESULTS_DIR}/{NAME}_best_scaler.job')
     joblib.dump(model_metadata, f'{RESULTS_DIR}/{NAME}_metadata.joblib')
