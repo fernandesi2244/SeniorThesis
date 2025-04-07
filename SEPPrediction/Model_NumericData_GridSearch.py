@@ -446,12 +446,12 @@ def main():
     print(f"Starting combined feature selection and PCA analysis at {time.ctime()}")
 
     # granularities = ['per-blob', 'per-disk-4hr', 'per-disk-1d'] # ['per-blob', 'per-disk-4hr', 'per-disk-1d']
-    granularities = ['per-blob']
+    granularities = ['per-disk-4hr', 'per-disk-1d']
 
     oversampling_ratios = [0.1, 0.25, 0.5, 0.65, 0.75, 1] # [0.1, 0.25, 0.5, 0.65, 0.75, 1] # pos:neg ratio. TODO: figure out some other day why > 0.65 isn't working
     
     # Define feature counts to test
-    feature_counts = [-1, 20, 40, 60, 80, 100] #[20, 40, 60, 80, 100]
+    feature_counts = [-1] #, 20, 40, 60, 80, 100] #[20, 40, 60, 80, 100]
     
     # Define component counts to test for PCA
     component_counts = [-1] #, 2, 3, 5, 10, 15, 20, 25, 30, 40, 50] #[-1, 2, 3, 5, 10, 15, 20, 25, 30, 40, 50]
@@ -478,18 +478,18 @@ def main():
     # ]
 
     model_types = [
-        'random_forest_simple',
-        'random_forest_complex',
-        'isolation_forest',
+        #'random_forest_simple',
+        #'random_forest_complex',
+        #'isolation_forest',
         'nn_simple',
         'nn_complex',
-        'logistic_regression_v1',
-        'logistic_regression_v2',
-        'gbm',
-        'xgboost',
-        'svm_rbf',
-        'svm_poly',
-        'knn_v1',
+        #'logistic_regression_v1',
+        #'logistic_regression_v2',
+        #'gbm',
+        #'xgboost',
+        #'svm_rbf',
+        #'svm_poly',
+        #'knn_v1',
     ]
 
     # TODO: later, look at ensembling techniques
