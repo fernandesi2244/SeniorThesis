@@ -446,7 +446,7 @@ def main():
     print(f"Starting combined feature selection and PCA analysis at {time.ctime()}")
 
     #granularities = ['per-blob', 'per-disk-4hr', 'per-disk-1d'] # ['per-blob', 'per-disk-4hr', 'per-disk-1d']
-    granularities = ['per-disk-1d', 'per-disk-4hr', 'per-blob']
+    granularities = ['per-blob']
 
     oversampling_ratios = [0.1, 0.25, 0.5, 0.65, 0.75, 1] # [0.1, 0.25, 0.5, 0.65, 0.75, 1] # pos:neg ratio. TODO: figure out some other day why > 0.65 isn't working
     
@@ -454,7 +454,7 @@ def main():
     feature_counts = [-1, 20, 40, 60, 80, 100] #[20, 40, 60, 80, 100]
     
     # Define component counts to test for PCA
-    component_counts = [-1, 2, 3, 5, 10, 15, 20, 25, 30, 40, 50] #[-1, 2, 3, 5, 10, 15, 20, 25, 30, 40, 50]
+    component_counts = [-1] #, 2, 3, 5, 10, 15, 20, 25, 30, 40, 50] #[-1, 2, 3, 5, 10, 15, 20, 25, 30, 40, 50]
 
     # Model files
     # model_types = [
@@ -478,23 +478,18 @@ def main():
     # ]
 
     model_types = [
-        # 'random_forest_simple',
-        # 'random_forest_complex',
-        # 'isolation_forest',
-        # #'gaussian_RBF',
-        # #'gaussian_matern',
-        # 'nn_simple',
-        # 'nn_complex',
-        # 'logistic_regression_v1',
-        # 'logistic_regression_v2',
-        # 'gbm',
-        # # 'lightgbm',
-        # 'xgboost',
-        # 'svm_rbf',
-        # 'svm_poly',
-        # 'knn_v1', # NOTE: phase 1 never handled oversampling ratio of 1, it stopped short here.
-        'knn_v2',
-        'knn_v3',
+        'random_forest_simple',
+        'random_forest_complex',
+        'isolation_forest',
+        'nn_simple',
+        'nn_complex',
+        'logistic_regression_v1',
+        'logistic_regression_v2',
+        'gbm',
+        'xgboost',
+        'svm_rbf',
+        'svm_poly',
+        'knn_v1',
     ]
 
     # TODO: later, look at ensembling techniques
@@ -608,12 +603,7 @@ def main():
                     
                     # Loop through different PCA component counts
                     for n_components in valid_components:
-                        if granularity == 'per-blob' and n_components == -1:
-                            print('Skipping non-PCA analysis for per-blob granularity...')
-                            continue
-
-                        # now, if n_components == -1, then it must be that granularity is full-disk
-                        if n_components == -1 and model_type.startswith('nn') and n_features != -1:
+                        if n_components == -1 and granularity.startswith('per-disk') and model_type.startswith('nn') and n_features != -1:
                             print('Skipping non-PCA analysis for full-disk NNs where feature reduction occurs')
                             continue
 
@@ -626,9 +616,9 @@ def main():
                         # time model loading
                         if model_type == 'isolation_forest':
                             percent_pos = np.sum(y_train) / len(y_train)
-                            model = ModelConstructor.create_model('photospheric', model_type, granularity, n_components, contamination=percent_pos)
+                            model = ModelConstructor.create_model('photospheric', model_type, granularity, n_components, contamination=percent_pos, num_features=n_features)
                         else:
-                            model = ModelConstructor.create_model('photospheric', model_type, granularity, n_components)
+                            model = ModelConstructor.create_model('photospheric', model_type, granularity, n_components, num_features=n_features)
 
                         if n_components != -1:
                             # Apply PCA
