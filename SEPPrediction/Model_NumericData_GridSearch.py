@@ -576,6 +576,7 @@ def main():
                 
                 # Loop through different feature counts
                 for n_features in feature_counts:
+                    og_n_features = n_features
                     if n_features == -1:
                         print('Skipping feature selection...')
                         n_features = len(feature_indices)
@@ -603,7 +604,7 @@ def main():
                     
                     # Loop through different PCA component counts
                     for n_components in valid_components:
-                        if n_components == -1 and granularity.startswith('per-disk') and model_type.startswith('nn') and n_features != -1:
+                        if n_components == -1 and granularity.startswith('per-disk') and model_type.startswith('nn') and og_n_features != -1:
                             print('Skipping non-PCA analysis for full-disk NNs where feature reduction occurs')
                             continue
 
