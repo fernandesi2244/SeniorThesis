@@ -723,6 +723,20 @@ def main():
     combined_test_cm = best_complete_config['combined_test_cm']
     test_metrics = evaluate_from_combined_confusion_matrix(combined_test_cm, "Test (Combined)")
     
+    def get_f_half(precision, recall):
+        return (1 + 0.5**2) * (precision * recall) / ((0.5**2 * precision) + recall)
+    
+    # Print all test metrics
+    print(f"Test Accuracy: {test_metrics['accuracy']:.4f}")
+    print(f"Test Precision: {test_metrics['precision']:.4f}")
+    print(f"Test Recall: {test_metrics['recall']:.4f}")
+    print(f"Test F1 Score: {test_metrics['f1']:.4f}")
+    print(f"Test F-0.5 Score: {get_f_half(test_metrics['precision'], test_metrics['recall']):.4f}")
+    print(f"Test HSS: {test_metrics['hss']:.4f}")
+    print(f"Test TSS: {test_metrics['tss']:.4f}")
+    print(f"Test Confusion Matrix:")
+    print(test_metrics['confusion_matrix'])
+    
     # Get model names for the best configuration across all splits
     best_model_names = []
     for split_seed in SPLIT_SEEDS:
