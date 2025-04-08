@@ -110,19 +110,19 @@ def create_parallel_coordinates_plot(df, data_type, output_dir='./'):
             values=df_processed['granularity_num']
         ),
         dict(
-            range=[df['oversampling_ratio'].min(), df['oversampling_ratio'].max()],
+            range=[df_processed['oversampling_ratio'].min(), df_processed['oversampling_ratio'].max()],
             label='Oversampling Ratio',
-            values=df['oversampling_ratio']
+            values=df_processed['oversampling_ratio']
         ),
         dict(
-            range=[df['n_features'].min(), df['n_features'].max()],
+            range=[df_processed['n_features'].min(), df_processed['n_features'].max()],
             label='Number of Features',
-            values=df['n_features']
+            values=df_processed['n_features']
         ),
         dict(
-            range=[df['n_components'].min(), df['n_components'].max()],
+            range=[df_processed['n_components'].min(), df_processed['n_components'].max()],
             label='Number of Components',
-            values=df['n_components']
+            values=df_processed['n_components']
         ),
         dict(
             range=[0, len(model_mapping)-1],
@@ -136,8 +136,8 @@ def create_parallel_coordinates_plot(df, data_type, output_dir='./'):
     # Create figure - use f_half score for coloring instead of f1
     fig = go.Figure(data=
         go.Parcoords(
-            line=dict(color=df['f_half'], colorscale='plasma', showscale=True, 
-                     cmin=df['f_half'].min(), cmax=df['f_half'].max()),
+            line=dict(color=df_processed['f_half'], colorscale='plasma', showscale=True, 
+                     cmin=df_processed['f_half'].min(), cmax=df_processed['f_half'].max()),
             dimensions=dimensions,
         )
     )
@@ -245,4 +245,19 @@ for i, (df, name) in enumerate(zip(results_dfs, results_names)):
             print(f"Model Type: {model}, Harmonic Mean of F-0.5 Scores: {harmonic_mean_f_half:.4f}, Average of F-0.5 Scores: {average_f_half:.4f}")
         else:
             print(f"Model Type: {model}, No F-0.5 Scores available")
+            continue
+
+# Print average f-1/2 by granularity
+print("\nAverage F-0.5 Scores by Granularity:")
+for i, (df, name) in enumerate(zip(results_dfs, results_names)):
+    print(f"\n{name.capitalize()} Data:")
+    granularity_types = df['granularity'].unique()
+    
+    for gran in granularity_types:
+        f_half_scores = df[df['granularity'] == gran]['f_half']
+        if len(f_half_scores) > 0:
+            average_f_half = f_half_scores.mean()
+            print(f"Granularity: {gran}, Average F-0.5 Score: {average_f_half:.4f}")
+        else:
+            print(f"Granularity: {gran}, No F-0.5 Scores available")
             continue
