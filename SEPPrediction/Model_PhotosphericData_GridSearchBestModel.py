@@ -496,6 +496,8 @@ def main():
                             print('\nBefore resampling:')
                             print('Train set count:', len(X_train_OG))
                             print('Train set SEP count:', np.sum(y_train_OG))
+                            print('Test set count:', len(X_test))
+                            print('Test set SEP count:', np.sum(y_test))
 
                             # if oversampling ratio is less than or equal to the current ratio, skip this configuration
                             if oversampling_ratio <= np.sum(y_train_OG) / (len(y_train_OG) - np.sum(y_train_OG)):
@@ -647,7 +649,8 @@ def main():
                         
                         # Combine confusion matrices across all splits
                         combined_val_cm = np.sum(np.array(val_cms), axis=0)
-                        combined_test_cm = np.sum(np.array(test_cms), axis=0)
+                        # combined_test_cm = np.sum(np.array(test_cms), axis=0)
+                        combined_test_cm = test_cms[0]
                         
                         print("\nCombined validation confusion matrix across all splits:")
                         print(combined_val_cm)
