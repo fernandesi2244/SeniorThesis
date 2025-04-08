@@ -456,10 +456,6 @@ def main():
                     print('\n' + '-'*50)
                     print(f'\nEvaluating feature count: {n_features}')
                     print('-'*50)
-
-                    if granularity.startswith('per-disk') and n_features == -1 and not model_type.startswith('nn'):
-                        print('Only care about no feature reduction for NN case')
-                        continue
                     
                     # For each PCA component count
                     for n_components in component_counts:
