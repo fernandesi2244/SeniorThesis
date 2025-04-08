@@ -63,7 +63,7 @@ def build_feature_names(granularity):
         feature_names = list(SEPInputDataGenerator.BLOB_ONE_TIME_INFO)
 
         # Time-series features for top 5 disk blobs and their previous 5 time steps
-        for i in range(1, 6):
+        for i in range(1, SEPInputDataGenerator.TOP_N_BLOBS + 1):
             for t in range(SEPInputDataGenerator.TIMESERIES_STEPS):
                 for col in SEPInputDataGenerator.BLOB_VECTOR_COLUMNS_GENERAL:
                     if t == 0:
@@ -446,15 +446,15 @@ def main():
     print(f"Starting combined feature selection and PCA analysis at {time.ctime()}")
 
     #granularities = ['per-blob', 'per-disk-4hr', 'per-disk-1d'] # ['per-blob', 'per-disk-4hr', 'per-disk-1d']
-    granularities = ['per-disk-1d', 'per-disk-4hr', 'per-blob']
+    granularities = ['per-disk-4hr', 'per-disk-1d']
 
     oversampling_ratios = [0.1, 0.25, 0.5, 0.65, 0.75, 1] # [0.1, 0.25, 0.5, 0.65, 0.75, 1] # pos:neg ratio. TODO: figure out some other day why > 0.65 isn't working
     
     # Define feature counts to test
-    feature_counts = [-1, 20, 40, 60, 80, 100] #[20, 40, 60, 80, 100]
+    feature_counts = [-1] #, 20, 40, 60, 80, 100] #[20, 40, 60, 80, 100]
     
     # Define component counts to test for PCA
-    component_counts = [-1, 2, 3, 5, 10, 15, 20, 25, 30, 40, 50] #[-1, 2, 3, 5, 10, 15, 20, 25, 30, 40, 50]
+    component_counts = [-1] #, 2, 3, 5, 10, 15, 20, 25, 30, 40, 50] #[-1, 2, 3, 5, 10, 15, 20, 25, 30, 40, 50]
 
     # Model files
     # model_types = [
@@ -481,20 +481,15 @@ def main():
         # 'random_forest_simple',
         # 'random_forest_complex',
         # 'isolation_forest',
-        # #'gaussian_RBF',
-        # #'gaussian_matern',
-        # 'nn_simple',
-        # 'nn_complex',
+        'nn_simple',
+        'nn_complex',
         # 'logistic_regression_v1',
         # 'logistic_regression_v2',
         # 'gbm',
-        # # 'lightgbm',
         # 'xgboost',
         # 'svm_rbf',
         # 'svm_poly',
-        # 'knn_v1', # NOTE: phase 1 never handled oversampling ratio of 1, it stopped short here.
-        'knn_v2',
-        'knn_v3',
+        # 'knn_v1',
     ]
 
     # TODO: later, look at ensembling techniques
@@ -548,8 +543,8 @@ def main():
                 print('Train set count:', len(X_train_OG))
                 print('Train set SEP count:', np.sum(y_train_OG))
 
-                # if oversampling ratio is less than or equal to the current ratio, skip
-                if oversampling_ratio <= np.sum(y_train_OG) / len(y_train_OG):
+                # if oversampling ratio is less than or equal to the current ratio, skip. note that oversampling ratio is pos : neg
+                if oversampling_ratio <= np.sum(y_train_OG) / (len(y_train_OG) - np.sum(y_train_OG)):
                     print(f"Skipping oversampling ratio {oversampling_ratio} as positive class already significant enough.")
                     continue
                 
@@ -581,6 +576,7 @@ def main():
                 
                 # Loop through different feature counts
                 for n_features in feature_counts:
+                    og_n_features = n_features
                     if n_features == -1:
                         print('Skipping feature selection...')
                         n_features = len(feature_indices)
@@ -608,12 +604,7 @@ def main():
                     
                     # Loop through different PCA component counts
                     for n_components in valid_components:
-                        if granularity == 'per-blob' and n_components == -1:
-                            print('Skipping non-PCA analysis for per-blob granularity...')
-                            continue
-
-                        # now, if n_components == -1, then it must be that granularity is full-disk
-                        if n_components == -1 and model_type.startswith('nn') and not n_features == -1:
+                        if n_components == -1 and granularity.startswith('per-disk') and model_type.startswith('nn') and og_n_features != -1:
                             print('Skipping non-PCA analysis for full-disk NNs where feature reduction occurs')
                             continue
 
@@ -626,9 +617,9 @@ def main():
                         # time model loading
                         if model_type == 'isolation_forest':
                             percent_pos = np.sum(y_train) / len(y_train)
-                            model = ModelConstructor.create_model('photospheric', model_type, granularity, n_components, contamination=percent_pos)
+                            model = ModelConstructor.create_model('photospheric', model_type, granularity, n_components, contamination=percent_pos, num_features=n_features)
                         else:
-                            model = ModelConstructor.create_model('photospheric', model_type, granularity, n_components)
+                            model = ModelConstructor.create_model('photospheric', model_type, granularity, n_components, num_features=n_features)
 
                         if n_components != -1:
                             # Apply PCA
@@ -787,7 +778,7 @@ def main():
     }
     
     # Save model and metadata
-    joblib.dump(best_config['model'], f'{RESULTS_DIR}/{NAME}_best_model.joblib')
+    # joblib.dump(best_config['model'], f'{RESULTS_DIR}/{NAME}_best_model.joblib')
     joblib.dump(best_config['pca'], f'{RESULTS_DIR}/{NAME}_best_pca.joblib')
     joblib.dump(best_config['scaler'], f'{RESULTS_DIR}/{NAME}_best_scaler.job')
     joblib.dump(model_metadata, f'{RESULTS_DIR}/{NAME}_metadata.joblib')

@@ -68,7 +68,7 @@ def build_feature_names(granularity):
         feature_names = list(SEPInputDataGenerator.BLOB_ONE_TIME_INFO)
 
         # Time-series features for top 5 disk blobs and their previous 5 time steps
-        for i in range(1, 6):
+        for i in range(1, SEPInputDataGenerator.TOP_N_BLOBS + 1):
             for t in range(SEPInputDataGenerator.TIMESERIES_STEPS):
                 for col in SEPInputDataGenerator.BLOB_VECTOR_COLUMNS_GENERAL:
                     if t == 0:
@@ -419,20 +419,16 @@ def main():
 
     granularities = ['per-disk-4hr']
     oversampling_ratios = [0.5, 0.6, 0.7, 0.8, 0.9, 1]
-    feature_counts = [-1, 30, 40, 50, 60, 70]
+    feature_counts = [30, 40, 50, 60, 70]
     component_counts = [-1]
     
-    # model_types = [
-    #     'nn_complex',
-    #     'logistic_regression_v2',
-    #     'xgboost',
-    #     'gbm',
-    #     'svm_rbf',
-    #     'svm_poly',
-    # ]
+    # prob don't even need to do all of these, just random forest complex
     model_types = [
         'nn_complex',
     ]
+    # model_types = [
+    #     'nn_complex',
+    # ]
 
     # Create a list to store all results
     all_results = []
@@ -466,15 +462,6 @@ def main():
                         print('\n' + '-'*50)
                         print(f'\nEvaluating component count: {n_components}')
                         print('-'*50)
-                        
-                        # Skip invalid combinations
-                        if granularity == 'per-blob' and n_components == -1:
-                            print('Skipping non-PCA analysis for per-blob granularity...')
-                            continue
-
-                        if n_components == -1 and granularity.startswith('per-disk') and model_type.startswith('nn') and n_features != -1:
-                            print('Skipping non-PCA analysis for full-disk NNs where feature reduction occurs')
-                            continue
 
                         if n_features != -1 and n_components > n_features:
                             print(f"Skipping PCA with {n_components} components as it exceeds the number of features {n_features}.")
@@ -520,7 +507,7 @@ def main():
                             print('Train set SEP count:', np.sum(y_train_OG))
 
                             # if oversampling ratio is less than or equal to the current ratio, skip this configuration
-                            if oversampling_ratio <= np.sum(y_train_OG) / len(y_train_OG):
+                            if oversampling_ratio <= np.sum(y_train_OG) / (len(y_train_OG) - np.sum(y_train_OG)):
                                 print(f"Skipping oversampling ratio {oversampling_ratio} as positive class already significant enough.")
                                 continue
                             
@@ -587,9 +574,9 @@ def main():
                             # Create the model
                             if model_type == 'isolation_forest':
                                 percent_pos = np.sum(y_train) / len(y_train)
-                                model = ModelConstructor.create_model('numeric', model_type, granularity, n_components, contamination=percent_pos)
+                                model = ModelConstructor.create_model('numeric', model_type, granularity, n_components, contamination=percent_pos, num_features=n_features)
                             else:
-                                model = ModelConstructor.create_model('numeric', model_type, granularity, n_components)
+                                model = ModelConstructor.create_model('numeric', model_type, granularity, n_components, num_features=n_features)
                             
                             # Train the model
                             train_start = time.time()
