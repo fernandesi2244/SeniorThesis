@@ -330,197 +330,297 @@ class ModelConstructor(object):
                     
                 else:
                     raise ValueError('Invalid version')
-            else:            
-                # Special case: Process different parts of the input vector with specialized blocks
-                if version == 'simple':
-                    # Define dimensions
-                    one_time_info_size = len(dataloader.BLOB_ONE_TIME_INFO)
-                    blob_block_size = dataloader.TIMESERIES_STEPS * len(dataloader.BLOB_VECTOR_COLUMNS_GENERAL)
-                    num_fulldisk_blobs = dataloader.TOP_N_BLOBS
-                    
-                    # Create an input layer for the complete input
-                    total_input_size = one_time_info_size + num_fulldisk_blobs * blob_block_size
-                    inputs = tf.keras.layers.Input(shape=(total_input_size,))
-                    
-                    # Process one-time info (first section)
-                    one_time_info = tf.keras.layers.Lambda(lambda x: x[:, :one_time_info_size])(inputs)
-                    
-                    # First hidden layer for one-time info
-                    r_dimension = 4
-                    one_time_processed = tf.keras.layers.Dense(r_dimension, activation='relu')(one_time_info)
-                    one_time_processed = tf.keras.layers.BatchNormalization()(one_time_processed)
-                    one_time_processed = tf.keras.layers.Dropout(0.2)(one_time_processed)
-                    
-                    # Process each timeseries block with the same neural network
-                    # Define the shared block for processing timeseries data
-                    d_dimension = blob_block_size // 4
-                    
-                    # Function to create a reusable block
-                    def create_blob_block(input_tensor):
-                        x = tf.keras.layers.Dense(d_dimension * 2, activation='relu')(input_tensor)
+            else: # per-disk
+                one_time_info_size = len(dataloader.BLOB_ONE_TIME_INFO)
+                blob_block_size = dataloader.TIMESERIES_STEPS * len(dataloader.BLOB_VECTOR_COLUMNS_GENERAL)
+                num_fulldisk_blobs = dataloader.TOP_N_BLOBS
+                
+                # Create an input layer for the complete input
+                total_input_size = one_time_info_size + num_fulldisk_blobs * blob_block_size
+                usual_complete_input_size = total_input_size
+                
+                if kwargs.get('num_features') == usual_complete_input_size: # no feature reduction
+                    # Special case: Process different parts of the input vector with specialized blocks
+                    if version == 'simple':
+                        # Define dimensions
+                        one_time_info_size = len(dataloader.BLOB_ONE_TIME_INFO)
+                        blob_block_size = dataloader.TIMESERIES_STEPS * len(dataloader.BLOB_VECTOR_COLUMNS_GENERAL)
+                        num_fulldisk_blobs = dataloader.TOP_N_BLOBS
+                        
+                        # Create an input layer for the complete input
+                        total_input_size = one_time_info_size + num_fulldisk_blobs * blob_block_size
+                        inputs = tf.keras.layers.Input(shape=(total_input_size,))
+                        
+                        # Process one-time info (first section)
+                        one_time_info = tf.keras.layers.Lambda(lambda x: x[:, :one_time_info_size])(inputs)
+                        
+                        # First hidden layer for one-time info
+                        r_dimension = 4
+                        one_time_processed = tf.keras.layers.Dense(r_dimension, activation='relu')(one_time_info)
+                        one_time_processed = tf.keras.layers.BatchNormalization()(one_time_processed)
+                        one_time_processed = tf.keras.layers.Dropout(0.2)(one_time_processed)
+                        
+                        # Process each timeseries block with the same neural network
+                        # Define the shared block for processing timeseries data
+                        d_dimension = blob_block_size // 4
+                        
+                        # Function to create a reusable block
+                        def create_blob_block(input_tensor):
+                            x = tf.keras.layers.Dense(d_dimension * 2, activation='relu')(input_tensor)
+                            x = tf.keras.layers.BatchNormalization()(x)
+                            x = tf.keras.layers.Dropout(0.2)(x)
+                            x = tf.keras.layers.Dense(d_dimension, activation='relu')(x)
+                            return x
+                        
+                        # Process each timeseries block and collect outputs
+                        blob_block_outputs = []
+                        for i in range(num_fulldisk_blobs):
+                            start_idx = one_time_info_size + i * blob_block_size
+                            end_idx = start_idx + blob_block_size
+                            
+                            # Extract this block of timeseries data
+                            blob_block = tf.keras.layers.Lambda(
+                                lambda x: x[:, start_idx:end_idx]
+                            )(inputs)
+                            
+                            # Process with the same neural network block
+                            processed_block = create_blob_block(blob_block)
+                            blob_block_outputs.append(processed_block)
+                        
+                        # Take element-wise maximum across all processed blocks
+                        if len(blob_block_outputs) > 1:
+                            timeseries_combined = tf.keras.layers.Maximum()(blob_block_outputs)
+                        else:
+                            raise ValueError('Invalid number of blocks provided')
+                        
+                        # Concatenate with the one-time info results
+                        combined = tf.keras.layers.Concatenate()([one_time_processed, timeseries_combined])
+                        
+                        # Final dense layers
+                        x = tf.keras.layers.Dense(max(16, (r_dimension + d_dimension) // 2), activation='relu')(combined)
                         x = tf.keras.layers.BatchNormalization()(x)
                         x = tf.keras.layers.Dropout(0.2)(x)
-                        x = tf.keras.layers.Dense(d_dimension, activation='relu')(x)
-                        return x
-                    
-                    # Process each timeseries block and collect outputs
-                    blob_block_outputs = []
-                    for i in range(num_fulldisk_blobs):
-                        start_idx = one_time_info_size + i * blob_block_size
-                        end_idx = start_idx + blob_block_size
                         
-                        # Extract this block of timeseries data
-                        blob_block = tf.keras.layers.Lambda(
-                            lambda x: x[:, start_idx:end_idx]
-                        )(inputs)
+                        # Output layer
+                        outputs = tf.keras.layers.Dense(1, activation='sigmoid')(x)
                         
-                        # Process with the same neural network block
-                        processed_block = create_blob_block(blob_block)
-                        blob_block_outputs.append(processed_block)
-                    
-                    # Take element-wise maximum across all processed blocks
-                    if len(blob_block_outputs) > 1:
-                        timeseries_combined = tf.keras.layers.Maximum()(blob_block_outputs)
-                    else:
-                        raise ValueError('Invalid number of blocks provided')
-                    
-                    # Concatenate with the one-time info results
-                    combined = tf.keras.layers.Concatenate()([one_time_processed, timeseries_combined])
-                    
-                    # Final dense layers
-                    x = tf.keras.layers.Dense(max(16, (r_dimension + d_dimension) // 2), activation='relu')(combined)
-                    x = tf.keras.layers.BatchNormalization()(x)
-                    x = tf.keras.layers.Dropout(0.2)(x)
-                    
-                    # Output layer
-                    outputs = tf.keras.layers.Dense(1, activation='sigmoid')(x)
-                    
-                    # Create model
-                    model = tf.keras.models.Model(inputs=inputs, outputs=outputs)
-                    
-                elif version == 'complex':
-                    # Define dimensions
-                    one_time_info_size = len(dataloader.BLOB_ONE_TIME_INFO)
-                    blob_block_size = dataloader.TIMESERIES_STEPS * len(dataloader.BLOB_VECTOR_COLUMNS_GENERAL)
-                    num_fulldisk_blobs = dataloader.TOP_N_BLOBS
-                    
-                    # Create an input layer for the complete input
-                    total_input_size = one_time_info_size + num_fulldisk_blobs * blob_block_size
-                    inputs = tf.keras.layers.Input(shape=(total_input_size,))
-                    
-                    # Process one-time info (first section)
-                    one_time_info = tf.keras.layers.Lambda(lambda x: x[:, :one_time_info_size])(inputs)
-                    
-                    # Apply normalization
-                    one_time_info_norm = tf.keras.layers.BatchNormalization()(one_time_info)
-                    
-                    # Determine r dimension for one-time info
-                    r_dimension = 4
-                    
-                    # Process one-time info with more complex structure
-                    x_one_time = tf.keras.layers.Dense(r_dimension, activation='relu')(one_time_info_norm)
-                    x_one_time = tf.keras.layers.BatchNormalization()(x_one_time)
-                    x_one_time = tf.keras.layers.Dropout(0.3)(x_one_time)
-                    
-                    # Second layer with residual connection
-                    prev_one_time = x_one_time
-                    x_one_time = tf.keras.layers.Dense(r_dimension, activation='relu')(x_one_time)
-                    x_one_time = tf.keras.layers.BatchNormalization()(x_one_time)
-                    x_one_time = tf.keras.layers.Dropout(0.3)(x_one_time)
-                    x_one_time = tf.keras.layers.Add()([x_one_time, prev_one_time])  # Residual connection
-                    
-                    # Final one-time info layer
-                    one_time_processed = tf.keras.layers.Dense(r_dimension, activation='relu')(x_one_time)
-                    one_time_processed = tf.keras.layers.BatchNormalization()(one_time_processed)
-                    
-                    # Define d dimension for timeseries data
-                    d_dimension = blob_block_size // 4
-                    
-                    # Function to create a reusable block with residual connections
-                    def create_complex_blob_block(input_tensor):
-                        # Normalize input
-                        x = tf.keras.layers.BatchNormalization()(input_tensor)
+                        # Create model
+                        model = tf.keras.models.Model(inputs=inputs, outputs=outputs)
                         
-                        # First dense layer
-                        x = tf.keras.layers.Dense(d_dimension * 2, activation='relu')(x)
+                    elif version == 'complex':
+                        # Define dimensions
+                        one_time_info_size = len(dataloader.BLOB_ONE_TIME_INFO)
+                        blob_block_size = dataloader.TIMESERIES_STEPS * len(dataloader.BLOB_VECTOR_COLUMNS_GENERAL)
+                        num_fulldisk_blobs = dataloader.TOP_N_BLOBS
+                        
+                        # Create an input layer for the complete input
+                        total_input_size = one_time_info_size + num_fulldisk_blobs * blob_block_size
+                        inputs = tf.keras.layers.Input(shape=(total_input_size,))
+                        
+                        # Process one-time info (first section)
+                        one_time_info = tf.keras.layers.Lambda(lambda x: x[:, :one_time_info_size])(inputs)
+                        
+                        # Apply normalization
+                        one_time_info_norm = tf.keras.layers.BatchNormalization()(one_time_info)
+                        
+                        # Determine r dimension for one-time info
+                        r_dimension = 4
+                        
+                        # Process one-time info with more complex structure
+                        x_one_time = tf.keras.layers.Dense(r_dimension, activation='relu')(one_time_info_norm)
+                        x_one_time = tf.keras.layers.BatchNormalization()(x_one_time)
+                        x_one_time = tf.keras.layers.Dropout(0.3)(x_one_time)
+                        
+                        # Second layer with residual connection
+                        prev_one_time = x_one_time
+                        x_one_time = tf.keras.layers.Dense(r_dimension, activation='relu')(x_one_time)
+                        x_one_time = tf.keras.layers.BatchNormalization()(x_one_time)
+                        x_one_time = tf.keras.layers.Dropout(0.3)(x_one_time)
+                        x_one_time = tf.keras.layers.Add()([x_one_time, prev_one_time])  # Residual connection
+                        
+                        # Final one-time info layer
+                        one_time_processed = tf.keras.layers.Dense(r_dimension, activation='relu')(x_one_time)
+                        one_time_processed = tf.keras.layers.BatchNormalization()(one_time_processed)
+                        
+                        # Define d dimension for timeseries data
+                        d_dimension = blob_block_size // 4
+                        
+                        # Function to create a reusable block with residual connections
+                        def create_complex_blob_block(input_tensor):
+                            # Normalize input
+                            x = tf.keras.layers.BatchNormalization()(input_tensor)
+                            
+                            # First dense layer
+                            x = tf.keras.layers.Dense(d_dimension * 2, activation='relu')(x)
+                            x = tf.keras.layers.BatchNormalization()(x)
+                            x = tf.keras.layers.Dropout(0.3)(x)
+                            
+                            # Second dense layer
+                            prev_layer = x
+                            x = tf.keras.layers.Dense(d_dimension, activation='relu')(x)
+                            x = tf.keras.layers.BatchNormalization()(x)
+                            x = tf.keras.layers.Dropout(0.3)(x)
+                            
+                            # Add residual connection with projection if needed
+                            projection = tf.keras.layers.Dense(d_dimension, use_bias=False)(prev_layer)
+                            x = tf.keras.layers.Add()([x, projection])
+                            
+                            # Final layer for this block
+                            x = tf.keras.layers.Dense(d_dimension, activation='relu')(x)
+                            return x
+                        
+                        # Process each timeseries block and collect outputs
+                        blob_block_outputs = []
+                        for i in range(num_fulldisk_blobs):
+                            start_idx = one_time_info_size + i * blob_block_size
+                            end_idx = start_idx + blob_block_size
+                            
+                            # Extract this block of timeseries data
+                            blob_block = tf.keras.layers.Lambda(
+                                lambda x: x[:, start_idx:end_idx]
+                            )(inputs)
+                            
+                            # Process with the complex block
+                            processed_block = create_complex_blob_block(blob_block)
+                            blob_block_outputs.append(processed_block)
+                        
+                        # Take element-wise maximum across all processed blocks
+                        if len(blob_block_outputs) > 1:
+                            timeseries_combined = tf.keras.layers.Maximum()(blob_block_outputs)
+                        else:
+                            raise ValueError('Invalid number of blocks provided')
+                        
+                        # Concatenate with the one-time info results
+                        combined = tf.keras.layers.Concatenate()([one_time_processed, timeseries_combined])
+                        
+                        # Apply non-linear transformation to combined features
+                        x = tf.keras.layers.Dense(max(32, (r_dimension + d_dimension) // 2), 
+                                                activation='relu')(combined)
                         x = tf.keras.layers.BatchNormalization()(x)
                         x = tf.keras.layers.Dropout(0.3)(x)
                         
-                        # Second dense layer
-                        prev_layer = x
-                        x = tf.keras.layers.Dense(d_dimension, activation='relu')(x)
+                        # Add another layer with residual connection
+                        prev_combined = x
+                        x = tf.keras.layers.Dense(max(32, (r_dimension + d_dimension) // 4), 
+                                                activation='relu')(x)
                         x = tf.keras.layers.BatchNormalization()(x)
-                        x = tf.keras.layers.Dropout(0.3)(x)
+                        x = tf.keras.layers.Dropout(0.2)(x)
                         
-                        # Add residual connection with projection if needed
-                        projection = tf.keras.layers.Dense(d_dimension, use_bias=False)(prev_layer)
-                        x = tf.keras.layers.Add()([x, projection])
+                        # Create projection for residual if dimensions don't match
+                        current_dim = max(32, (r_dimension + d_dimension) // 4)
+                        prev_dim = max(32, (r_dimension + d_dimension) // 2)
                         
-                        # Final layer for this block
-                        x = tf.keras.layers.Dense(d_dimension, activation='relu')(x)
-                        return x
+                        if current_dim != prev_dim:
+                            projection = tf.keras.layers.Dense(current_dim, use_bias=False)(prev_combined)
+                            x = tf.keras.layers.Add()([x, projection])
+                        else:
+                            x = tf.keras.layers.Add()([x, prev_combined])
+                        
+                        # Output layer
+                        outputs = tf.keras.layers.Dense(1, activation='sigmoid')(x)
+                        
+                        # Create model
+                        model = tf.keras.models.Model(inputs=inputs, outputs=outputs)
+                        
+                        # Add L2 regularization to all Dense layers
+                        for layer in model.layers:
+                            if isinstance(layer, tf.keras.layers.Dense):
+                                layer.kernel_regularizer = tf.keras.regularizers.l2(1e-5)
                     
-                    # Process each timeseries block and collect outputs
-                    blob_block_outputs = []
-                    for i in range(num_fulldisk_blobs):
-                        start_idx = one_time_info_size + i * blob_block_size
-                        end_idx = start_idx + blob_block_size
-                        
-                        # Extract this block of timeseries data
-                        blob_block = tf.keras.layers.Lambda(
-                            lambda x: x[:, start_idx:end_idx]
-                        )(inputs)
-                        
-                        # Process with the complex block
-                        processed_block = create_complex_blob_block(blob_block)
-                        blob_block_outputs.append(processed_block)
-                    
-                    # Take element-wise maximum across all processed blocks
-                    if len(blob_block_outputs) > 1:
-                        timeseries_combined = tf.keras.layers.Maximum()(blob_block_outputs)
                     else:
-                        raise ValueError('Invalid number of blocks provided')
+                        raise ValueError('Invalid version')
                     
-                    # Concatenate with the one-time info results
-                    combined = tf.keras.layers.Concatenate()([one_time_processed, timeseries_combined])
-                    
-                    # Apply non-linear transformation to combined features
-                    x = tf.keras.layers.Dense(max(32, (r_dimension + d_dimension) // 2), 
-                                            activation='relu')(combined)
-                    x = tf.keras.layers.BatchNormalization()(x)
-                    x = tf.keras.layers.Dropout(0.3)(x)
-                    
-                    # Add another layer with residual connection
-                    prev_combined = x
-                    x = tf.keras.layers.Dense(max(32, (r_dimension + d_dimension) // 4), 
-                                            activation='relu')(x)
-                    x = tf.keras.layers.BatchNormalization()(x)
-                    x = tf.keras.layers.Dropout(0.2)(x)
-                    
-                    # Create projection for residual if dimensions don't match
-                    current_dim = max(32, (r_dimension + d_dimension) // 4)
-                    prev_dim = max(32, (r_dimension + d_dimension) // 2)
-                    
-                    if current_dim != prev_dim:
-                        projection = tf.keras.layers.Dense(current_dim, use_bias=False)(prev_combined)
-                        x = tf.keras.layers.Add()([x, projection])
-                    else:
-                        x = tf.keras.layers.Add()([x, prev_combined])
-                    
-                    # Output layer
-                    outputs = tf.keras.layers.Dense(1, activation='sigmoid')(x)
-                    
-                    # Create model
-                    model = tf.keras.models.Model(inputs=inputs, outputs=outputs)
-                    
-                    # Add L2 regularization to all Dense layers
-                    for layer in model.layers:
-                        if isinstance(layer, tf.keras.layers.Dense):
-                            layer.kernel_regularizer = tf.keras.regularizers.l2(1e-5)
-                
-                else:
-                    raise ValueError('Invalid version')
+                else: # full-disk NN with no PCA but some feature reduction
+                    if version == 'simple':
+                        complete_input_size = kwargs.get('num_features')
+                        input_shape = (complete_input_size,)
 
+                        # Use a power of 2 scaling approach
+                        curr_neuron_count = complete_input_size
+                        layers = []
+                        
+                        # Add input layer
+                        layers.append(tf.keras.layers.Input(shape=input_shape))
+                        
+                        while curr_neuron_count > 4:  # Continue until we reach a small threshold
+                            # Calculate neuron count for current layer (next power of 2)
+                            neurons = 2 ** (curr_neuron_count.bit_length())
+                            
+                            # Cap maximum neurons to prevent extremely large layers
+                            neurons = min(neurons, 256)
+
+                            # Add dense layer
+                            layers.append(tf.keras.layers.Dense(neurons, activation='relu'))
+                            layers.append(tf.keras.layers.BatchNormalization())
+                            layers.append(tf.keras.layers.Dropout(0.2))
+
+                            curr_neuron_count = curr_neuron_count // 2
+
+                        # Add output layer
+                        layers.append(tf.keras.layers.Dense(1, activation='sigmoid'))
+
+                        # Create model with dynamic layers
+                        model = Sequential(layers)
+
+                    elif version == 'complex':
+                        complete_input_size = kwargs.get('num_features')
+                        input_shape = (complete_input_size,)
+                        
+                        # Create an input layer
+                        inputs = tf.keras.layers.Input(shape=input_shape)
+                        
+                        # Initial normalization of inputs
+                        x = tf.keras.layers.BatchNormalization()(inputs)
+                        
+                        # Start with a base layer size
+                        current_neuron_count = complete_input_size
+                        
+                        # Track previous layer for a single residual connection
+                        previous_layer = x
+                        
+                        # Calculate the initial neuron count - capped at 128
+                        initial_neurons = min(256, 2 ** (current_neuron_count.bit_length() - 1))
+                        
+                        # First hidden layer
+                        x = tf.keras.layers.Dense(initial_neurons, activation='relu')(x)
+                        x = tf.keras.layers.BatchNormalization()(x)
+                        x = tf.keras.layers.Dropout(0.3)(x)  # Higher dropout to prevent overfitting
+                        
+                        # Second hidden layer - half the neurons
+                        second_layer_neurons = max(16, initial_neurons // 2)
+                        x = tf.keras.layers.Dense(second_layer_neurons, activation='relu')(x)
+                        x = tf.keras.layers.BatchNormalization()(x)
+                        x = tf.keras.layers.Dropout(0.3)(x)
+                        
+                        # Add a residual connection with dimension adaptation
+                        # Project previous_layer to match current dimensions if needed
+                        if second_layer_neurons != tf.keras.backend.int_shape(previous_layer)[-1]:
+                            # Create a projection to match dimensions
+                            projection = tf.keras.layers.Dense(second_layer_neurons, 
+                                                            use_bias=False)(previous_layer)
+                            x = tf.keras.layers.Add()([x, projection])
+                        else:
+                            # Dimensions already match
+                            x = tf.keras.layers.Add()([x, previous_layer])
+                        
+                        # Final compression layer
+                        x = tf.keras.layers.Dense(max(8, complete_input_size // 4), activation='relu')(x)
+                        x = tf.keras.layers.BatchNormalization()(x)
+                        x = tf.keras.layers.Dropout(0.2)(x)
+                        
+                        # Output layer
+                        outputs = tf.keras.layers.Dense(1, activation='sigmoid')(x)
+                        
+                        # Create model
+                        model = tf.keras.models.Model(inputs=inputs, outputs=outputs)
+                        
+                        # Add mild L2 regularization to all Dense layers
+                        for layer in model.layers:
+                            if isinstance(layer, tf.keras.layers.Dense):
+                                layer.kernel_regularizer = tf.keras.regularizers.l2(1e-5)  # Lighter regularization
+
+                    else:
+                        raise ValueError('Invalid version')
         # n_components is not -1, so we can use the regular logic that doesn't assume any vector structure (because of PCA)
         elif granularity.startswith('per-disk'):
             # Original logic for per-disk granularity
