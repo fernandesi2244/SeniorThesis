@@ -208,7 +208,7 @@ def evaluate_from_combined_confusion_matrix(combined_cm, set_name=""):
         'confusion_matrix': combined_cm
     }
 
-def feature_selection(X_train, y_train, feature_names):
+def feature_selection(X_train, y_train, feature_names, split_seed):
     """
     Perform feature selection using Random Forest
     
@@ -216,6 +216,7 @@ def feature_selection(X_train, y_train, feature_names):
         X_train: Training data
         y_train: Training labels
         feature_names: List of feature names
+        split_seed: the random split currently being used
         
     Returns:
         Indices of features sorted by importance
@@ -250,7 +251,7 @@ def feature_selection(X_train, y_train, feature_names):
     feature_indices = [feature_names.index(feature) for feature in feature_importance_df['Feature']]
     
     # Save feature importance
-    feature_importance_df.to_csv(f'{RESULTS_DIR}/{NAME}_feature_importance.csv', index=False)
+    feature_importance_df.to_csv(f'{RESULTS_DIR}/{NAME}_feature_importance_split{split_seed}.csv', index=False)
     
     # Return indices of features sorted by importance
     return feature_indices
@@ -517,7 +518,7 @@ def main():
                             print('Train set SEP count:', np.sum(y_train))
                             
                             # Run feature selection
-                            feature_indices = feature_selection(X_train, y_train, feature_names)
+                            feature_indices = feature_selection(X_train, y_train, feature_names, split_seed)
                             selected_features = [feature_names[i] for i in feature_indices]
                             
                             # Check if we have enough features
