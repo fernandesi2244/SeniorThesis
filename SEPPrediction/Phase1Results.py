@@ -200,6 +200,22 @@ for i, (df, name) in enumerate(zip(results_dfs, results_names)):
             print(f"Granularity: {granularity}, No F1 Scores available")
             continue
 
+# Now do the same but for the 'oversampling_ratio'
+print("\nHarmonic Mean and Average of F1 Scores for Each Oversampling Ratio:")
+for i, (df, name) in enumerate(zip(results_dfs, results_names)):
+    print(f"\n{name.capitalize()} Data:")
+    oversampling_ratios = df['oversampling_ratio'].unique()
+    
+    for ratio in oversampling_ratios:
+        f1_scores = df[df['oversampling_ratio'] == ratio]['f1']
+        if len(f1_scores) > 0:
+            harmonic_mean_f1 = len(f1_scores) / np.sum(1.0 / f1_scores)
+            average_f1 = f1_scores.mean()
+            print(f"Oversampling Ratio: {ratio}, Harmonic Mean of F1 Scores: {harmonic_mean_f1:.4f}, Average of F1 Scores: {average_f1:.4f}")
+        else:
+            print(f"Oversampling Ratio: {ratio}, No F1 Scores available")
+            continue
+
 # Now do the same but condition on the granularity being per-disk-4hr
 granularity = 'per-disk-4hr'
 print(f"\nHarmonic Mean and Average of F1 Scores for Each Model Type (Granularity: {granularity}):")
