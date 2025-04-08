@@ -4,31 +4,31 @@ import plotly.graph_objects as go
 import numpy as np
 
 # Load the grid search results
-photospheric_grid_search_file = '../OutputData/sep_prediction_photospheric_data_grid_search_phase_1_all_results.csv'
+photospheric_grid_search_file = '../OutputData/sep_prediction_photospheric_data_grid_search_phase_2_all_results.csv'
 photospheric_grid_search_results = pd.read_csv(photospheric_grid_search_file)
 print('Photospheric data shape before dropping dups:', photospheric_grid_search_results.shape)
 photospheric_grid_search_results = photospheric_grid_search_results.drop_duplicates()
 photospheric_grid_search_results = photospheric_grid_search_results.reset_index(drop=True)
 print('Photospheric data shape after dropping dups:', photospheric_grid_search_results.shape)
 
-coronal_grid_search_file = '../OutputData/sep_prediction_coronal_data_grid_search_phase_1_all_results.csv'
-coronal_grid_search_results = pd.read_csv(coronal_grid_search_file)
-print('Coronal data shape before dropping dups:', coronal_grid_search_results.shape)
-coronal_grid_search_results = coronal_grid_search_results.drop_duplicates()
-coronal_grid_search_results = coronal_grid_search_results.reset_index(drop=True)
-print('Coronal data shape after dropping dups:', coronal_grid_search_results.shape)
+# coronal_grid_search_file = '../OutputData/sep_prediction_coronal_data_grid_search_phase_2_all_results.csv'
+# coronal_grid_search_results = pd.read_csv(coronal_grid_search_file)
+# print('Coronal data shape before dropping dups:', coronal_grid_search_results.shape)
+# coronal_grid_search_results = coronal_grid_search_results.drop_duplicates()
+# coronal_grid_search_results = coronal_grid_search_results.reset_index(drop=True)
+# print('Coronal data shape after dropping dups:', coronal_grid_search_results.shape)
 
-numeric_grid_search_file = '../OutputData/sep_prediction_numeric_data_grid_search_phase_1_all_results.csv'
-numeric_grid_search_results = pd.read_csv(numeric_grid_search_file)
-print('Numeric data shape before dropping dups:', numeric_grid_search_results.shape)
-numeric_grid_search_results = numeric_grid_search_results.drop_duplicates()
-numeric_grid_search_results = numeric_grid_search_results.reset_index(drop=True)
-print('Numeric data shape after dropping dups:', numeric_grid_search_results.shape)
+# numeric_grid_search_file = '../OutputData/sep_prediction_numeric_data_grid_search_phase_2_all_results.csv'
+# numeric_grid_search_results = pd.read_csv(numeric_grid_search_file)
+# print('Numeric data shape before dropping dups:', numeric_grid_search_results.shape)
+# numeric_grid_search_results = numeric_grid_search_results.drop_duplicates()
+# numeric_grid_search_results = numeric_grid_search_results.reset_index(drop=True)
+# print('Numeric data shape after dropping dups:', numeric_grid_search_results.shape)
 
 # Print general performance stats for each file
-results_dfs = [photospheric_grid_search_results, coronal_grid_search_results, numeric_grid_search_results]
-results_names = ['photospheric', 'coronal', 'numeric']
-results_columns = ['accuracy', 'precision', 'recall', 'f1', 'auc']
+results_dfs = [photospheric_grid_search_results] #, coronal_grid_search_results, numeric_grid_search_results]
+results_names = ['photospheric'] #, 'coronal', 'numeric']
+results_columns = ['accuracy', 'precision', 'recall', 'f1'] #, 'auc']
 
 for i, results_df in enumerate(results_dfs):
     print(f"Results for {results_names[i]} data:")
@@ -67,10 +67,13 @@ def preprocess_for_parallel_coords(df):
     if 'model_type' in df_copy.columns:
         model_mapping = {val: i for i, val in enumerate(df_copy['model_type'].unique())}
         df_copy['model_type_num'] = df_copy['model_type'].map(model_mapping)
+        print("Model mapping:", model_mapping)
     
     # Sort df_copy in ascending order of 'f1'
     df_copy = df_copy.sort_values(by='f1', ascending=True)
-    
+
+    print('best df_copy head with model_type_num:', df_copy[['model_type', 'model_type_num', 'f1']].iloc[:5])
+    print('worst df_copy head with model_type_num:', df_copy[['model_type', 'model_type_num', 'f1']].iloc[-5:])
     return df_copy, granularity_mapping, model_mapping
 
 def create_parallel_coordinates_plot(df, data_type, output_dir='./'):
@@ -86,6 +89,8 @@ def create_parallel_coordinates_plot(df, data_type, output_dir='./'):
     # Sort labels by their numeric values
     granularity_ticktext = [granularity_labels[i] for i in sorted(granularity_labels.keys())]
     model_ticktext = [model_labels[i] for i in sorted(model_labels.keys())]
+
+    print('Model ticktext:', model_ticktext)
     
     # Create dimensions list for parallel coordinates
     dimensions = [
@@ -145,7 +150,7 @@ def create_parallel_coordinates_plot(df, data_type, output_dir='./'):
     return fig
 
 # Create output directory if it doesn't exist
-output_dir = '../OutputData/Phase1/Plots/New'
+output_dir = '../OutputData/Phase2/Plots/New'
 os.makedirs(output_dir, exist_ok=True)
 
 # Generate and save parallel coordinates plots for each dataset
@@ -163,7 +168,7 @@ for i, (df, name) in enumerate(zip(results_dfs, results_names)):
     print(f"Accuracy: {best_config['accuracy']:.4f}")
     print(f"Precision: {best_config['precision']:.4f}")
     print(f"Recall: {best_config['recall']:.4f}")
-    print(f"AUC: {best_config['auc']:.4f}")
+    # print(f"AUC: {best_config['auc']:.4f}")
     
     for col in parallel_coords_columns:
         print(f"{col}: {best_config[col]}")
