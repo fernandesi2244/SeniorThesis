@@ -185,12 +185,16 @@ def evaluate_from_combined_confusion_matrix(combined_cm, set_name=""):
     # We'll set it to None for now
     auc = None
     
+    def get_f_half(precision, recall):
+        return (1 + 0.5**2) * (precision * recall) / ((0.5**2 * precision) + recall)
+    
     # Print metrics
     print(f'{set_name} Results from Combined Confusion Matrix:')
     print(f'Accuracy: {accuracy:.4f}')
     print(f'Precision: {precision:.4f}')
     print(f'Recall: {recall:.4f}')
     print(f'F1 Score: {f1:.4f}')
+    print(f'F-0.5 Score: {get_f_half(precision, recall):.4f}')
     print(f'HSS: {hss:.4f}')
     print(f'TSS: {tss:.4f}')
     print(f'Combined Confusion Matrix:')
