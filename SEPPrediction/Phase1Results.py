@@ -4,21 +4,21 @@ import plotly.graph_objects as go
 import numpy as np
 
 # Load the grid search results
-photospheric_grid_search_file = '../OutputData/sep_prediction_photospheric_data_grid_search_all_results_so_far.csv'
+photospheric_grid_search_file = '../OutputData/sep_prediction_photospheric_data_grid_search_phase_1_all_results.csv'
 photospheric_grid_search_results = pd.read_csv(photospheric_grid_search_file)
 print('Photospheric data shape before dropping dups:', photospheric_grid_search_results.shape)
 photospheric_grid_search_results = photospheric_grid_search_results.drop_duplicates()
 photospheric_grid_search_results = photospheric_grid_search_results.reset_index(drop=True)
 print('Photospheric data shape after dropping dups:', photospheric_grid_search_results.shape)
 
-coronal_grid_search_file = '../OutputData/sep_prediction_coronal_data_grid_search_all_results_so_far.csv'
+coronal_grid_search_file = '../OutputData/sep_prediction_coronal_data_grid_search_phase_1_all_results.csv'
 coronal_grid_search_results = pd.read_csv(coronal_grid_search_file)
 print('Coronal data shape before dropping dups:', coronal_grid_search_results.shape)
 coronal_grid_search_results = coronal_grid_search_results.drop_duplicates()
 coronal_grid_search_results = coronal_grid_search_results.reset_index(drop=True)
 print('Coronal data shape after dropping dups:', coronal_grid_search_results.shape)
 
-numeric_grid_search_file = '../OutputData/sep_prediction_numeric_data_grid_search_all_results_so_far.csv'
+numeric_grid_search_file = '../OutputData/sep_prediction_numeric_data_grid_search_phase_1_all_results.csv'
 numeric_grid_search_results = pd.read_csv(numeric_grid_search_file)
 print('Numeric data shape before dropping dups:', numeric_grid_search_results.shape)
 numeric_grid_search_results = numeric_grid_search_results.drop_duplicates()
@@ -182,6 +182,22 @@ for i, (df, name) in enumerate(zip(results_dfs, results_names)):
             print(f"Model Type: {model}, Harmonic Mean of F1 Scores: {harmonic_mean_f1:.4f}, Average of F1 Scores: {average_f1:.4f}")
         else:
             print(f"Model Type: {model}, No F1 Scores available")
+            continue
+
+# Now do the same but for the granularity
+print("\nHarmonic Mean and Average of F1 Scores for Each Granularity:")
+for i, (df, name) in enumerate(zip(results_dfs, results_names)):
+    print(f"\n{name.capitalize()} Data:")
+    granularity_types = df['granularity'].unique()
+    
+    for granularity in granularity_types:
+        f1_scores = df[df['granularity'] == granularity]['f1']
+        if len(f1_scores) > 0:
+            harmonic_mean_f1 = len(f1_scores) / np.sum(1.0 / f1_scores)
+            average_f1 = f1_scores.mean()
+            print(f"Granularity: {granularity}, Harmonic Mean of F1 Scores: {harmonic_mean_f1:.4f}, Average of F1 Scores: {average_f1:.4f}")
+        else:
+            print(f"Granularity: {granularity}, No F1 Scores available")
             continue
 
 # Now do the same but condition on the granularity being per-disk-4hr
