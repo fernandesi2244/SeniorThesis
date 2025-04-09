@@ -483,6 +483,44 @@ def main():
                 # Save current state of all_results
                 results_df = pd.DataFrame(all_results)
                 results_df.to_csv(f'{RESULTS_DIR}/{NAME}_all_results_so_far.csv', index=False)
+                
+                
+                # Check metrics on train data
+                y_train_pred_proba = model.predict(train_generator)
+                y_train_pred = (y_train_pred_proba > 0.5).astype(int)
+                
+                train_metrics = evaluate_model(y_train, y_train_pred, y_train_pred_proba, "Train")
+                
+                print(f'\nTrain Metrics:')
+                print(f'Accuracy: {train_metrics["accuracy"]:.4f}')
+                print(f'Precision: {train_metrics["precision"]:.4f}')
+                print(f'Recall: {train_metrics["recall"]:.4f}')
+                print(f'F1 Score: {train_metrics["f1"]:.4f}')
+                
+                # Check metrics on val data
+                y_val_pred_proba = model.predict(val_generator)
+                y_val_pred = (y_val_pred_proba > 0.5).astype(int)
+
+                val_metrics = evaluate_model(y_val, y_val_pred, y_val_pred_proba, "Validation")
+                
+                print(f'\nValidation Metrics:')
+                print(f'Accuracy: {val_metrics["accuracy"]:.4f}')
+                print(f'Precision: {val_metrics["precision"]:.4f}')
+                print(f'Recall: {val_metrics["recall"]:.4f}')
+                print(f'F1 Score: {val_metrics["f1"]:.4f}')
+                
+                # Check metrics on test data
+                y_test_pred_proba = model.predict(test_generator)
+                y_test_pred = (y_test_pred_proba > 0.5).astype(int)
+                
+                test_metrics = evaluate_model(y_test, y_test_pred, y_test_pred_proba, "Test")
+                
+                print(f'\nTest Metrics:')
+                print(f'Accuracy: {test_metrics["accuracy"]:.4f}')
+                print(f'Precision: {test_metrics["precision"]:.4f}')
+                print(f'Recall: {test_metrics["recall"]:.4f}')
+                print(f'F1 Score: {test_metrics["f1"]:.4f}')
+                
     
     # Convert results to DataFrame
     results_df = pd.DataFrame(all_results)
