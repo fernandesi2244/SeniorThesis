@@ -512,17 +512,17 @@ def main():
                 print(f'Recall: {val_metrics["recall"]:.4f}')
                 print(f'F1 Score: {val_metrics["f1"]:.4f}')
                 
-                # Check metrics on test data
-                y_test_pred_proba = model.predict(test_generator)
-                y_test_pred = (y_test_pred_proba > 0.5).astype(int)
+                # # Check metrics on test data
+                # y_test_pred_proba = model.predict(test_generator)
+                # y_test_pred = (y_test_pred_proba > 0.5).astype(int)
                 
-                test_metrics = evaluate_model(y_test, y_test_pred, y_test_pred_proba, "Test")
+                # test_metrics = evaluate_model(y_test, y_test_pred, y_test_pred_proba, "Test")
                 
-                print(f'\nTest Metrics:')
-                print(f'Accuracy: {test_metrics["accuracy"]:.4f}')
-                print(f'Precision: {test_metrics["precision"]:.4f}')
-                print(f'Recall: {test_metrics["recall"]:.4f}')
-                print(f'F1 Score: {test_metrics["f1"]:.4f}')
+                # print(f'\nTest Metrics:')
+                # print(f'Accuracy: {test_metrics["accuracy"]:.4f}')
+                # print(f'Precision: {test_metrics["precision"]:.4f}')
+                # print(f'Recall: {test_metrics["recall"]:.4f}')
+                # print(f'F1 Score: {test_metrics["f1"]:.4f}')
                 
     
     # Convert results to DataFrame
