@@ -67,6 +67,10 @@ class ModelConstructor(object):
             dataloader = VolumeSlicesAndCubeDataLoader.SecondarySEPInputDataGenerator
         elif dataloader_type == 'cube':
             dataloader = VolumeCubeDataLoader.SecondarySEPInputDataGenerator
+        # elif dataloader_type == 'just_cube':
+        #     dataloader = JustCubeDataLoader.SecondarySEPInputDataGenerator
+        # elif dataloader_type == 'recent_events':
+        #     dataloader = RecentEventsDataLoader.SecondarySEPInputDataGenerator
         elif dataloader_type == 'slices':
             dataloader = VolumeSlicesDataLoader.SecondarySEPInputDataGenerator
         else:
@@ -97,6 +101,8 @@ class ModelConstructor(object):
             'conv_nn_on_slices_and_cube': lambda: ModelConstructor.get_conv_nn(dataloader, granularity, 'slices_and_cube'),
             'conv_nn_on_cube': lambda: ModelConstructor.get_conv_nn(dataloader, granularity, 'cube'),
             'conv_nn_on_cube_simple': lambda: ModelConstructor.get_conv_nn(dataloader, granularity, 'cube_simple'),
+            'conv_nn_on_cube_simple_just_cube': lambda: ModelConstructor.get_conv_nn_just_cube(dataloader, granularity, 'cube_simple'),
+            'conv_nn_on_cube_simple_recent_events': lambda: ModelConstructor.get_conv_nn_recent_events(dataloader, granularity, 'cube_simple'),
             'conv_nn_on_cube_complex': lambda: ModelConstructor.get_conv_nn(dataloader, granularity, 'cube_complex'),
             'conv_nn_on_slices': lambda: ModelConstructor.get_conv_nn(dataloader, granularity, 'slices'),
         }
@@ -1585,3 +1591,207 @@ class ModelConstructor(object):
             return model
         else:
             raise ValueError('Invalid version')
+    
+    def get_conv_nn_just_cube(dataloader, granularity, version):
+        # NOTE: Function not completely implemented, used as a quick robustness check.
+        # Please refer to get_conv_nn for full functionality.
+        if granularity == 'per-blob':
+            raise ValueError('Convolutional models are not yet supported for per-blob granularity')
+        
+        # NOTE: From now on, assuming per-disk. Moreover, both options (1d vs 4hr) are treated equally
+        class StackLayer(tf.keras.layers.Layer):
+            def __init__(self, axis=1, **kwargs):
+                super(StackLayer, self).__init__(**kwargs)
+                self.axis = axis
+                
+            def call(self, inputs):
+                return tf.stack(inputs, axis=self.axis)
+        
+        if version == 'cube_simple':
+            """
+            Input format per batch example (all as flattened scalar values immediately following each other)
+            - BLOB_ONE_TIME_INFO
+            x TOP_N_BLOBS
+                -- BLOB_VECTOR_COLUMNS_GENERAL
+                -- 5*5*5*channels (5x5x5 cube)
+            """
+            nx, ny, nz, channels = 200, 400, 100, 3
+
+            complete_input_size = len(dataloader.BLOB_ONE_TIME_INFO) + dataloader.TOP_N_BLOBS * (
+                len(dataloader.BLOB_VECTOR_COLUMNS_GENERAL) + 5 * 5 * 5 * channels)
+            
+            flattened_input = tf.keras.layers.Input(shape=(complete_input_size,))
+
+            # Split the input into the two main parts
+            # one_time_info_input = tf.keras.layers.Lambda(lambda x: x[:, :len(dataloader.BLOB_ONE_TIME_INFO)])(flattened_input)
+            blob_data_input = tf.keras.layers.Lambda(lambda x: x[:, len(dataloader.BLOB_ONE_TIME_INFO):])(flattened_input)
+
+            # Process the one-time info (single small layer, no BatchNorm)
+            # one_time_info_output = tf.keras.layers.Dense(1, activation='relu')(one_time_info_input)
+            
+            # Create shared layers for all blobs (much smaller)
+            # Shared layer for blob general info
+            general_dense = tf.keras.layers.Dense(1, activation='relu')
+            
+            # Simplified shared layers for cube (fewer filters, no BatchNorm)
+            cube_conv_layer = tf.keras.layers.Conv3D(2, (3, 3, 3), activation='relu')
+            cube_dense = tf.keras.layers.Dense(2, activation='relu')
+            
+            # Process each blob with shared layers
+            blob_data_output = []
+            len_each_blob = len(dataloader.BLOB_VECTOR_COLUMNS_GENERAL) + 5 * 5 * 5 * channels
+            
+            for i in range(dataloader.TOP_N_BLOBS):
+                # Extract the blob data for this blob
+                start_general_index = i * len(dataloader.BLOB_VECTOR_COLUMNS_GENERAL)
+                end_general_index = start_general_index + len(dataloader.BLOB_VECTOR_COLUMNS_GENERAL)
+                general_info = tf.keras.layers.Lambda(lambda x: x[:, start_general_index:end_general_index])(blob_data_input)
+                
+                # Extract cube data
+                start_cube_index = dataloader.TOP_N_BLOBS * len(dataloader.BLOB_VECTOR_COLUMNS_GENERAL) + i * (5 * 5 * 5 * channels)
+                end_cube_index = start_cube_index + 5 * 5 * 5 * channels
+                cube = tf.keras.layers.Lambda(lambda x: x[:, start_cube_index:end_cube_index])(blob_data_input)
+                
+                # Process general info (single small layer)
+                general_output = general_dense(general_info)
+                
+                # Process cube (single conv layer, single small dense layer)
+                cube = tf.keras.layers.Reshape((5, 5, 5, channels))(cube)
+                cube_output = cube_conv_layer(cube)
+                cube_output = tf.keras.layers.Flatten()(cube_output)
+                cube_output = cube_dense(cube_output)
+                
+                # Concatenate outputs for this blob
+                combined_output = tf.keras.layers.Concatenate()([general_output, cube_output])
+                
+                # Add the output to the list
+                blob_data_output.append(combined_output)
+            
+            # Aggregate the outputs for each blob by taking the maximum value
+            blob_data_output = tf.keras.layers.Maximum()(blob_data_output)
+            
+            # Combine the one-time info and blob data outputs
+            # combined_output = tf.keras.layers.Concatenate()([one_time_info_output, blob_data_output])
+            combined_output = blob_data_output
+            
+            # Final processing (single small layer)
+            combined_output = tf.keras.layers.Dense(2, activation='relu')(combined_output)
+            
+            # Output layer
+            outputs = tf.keras.layers.Dense(1, activation='sigmoid')(combined_output)
+            
+            # Create model
+            model = tf.keras.models.Model(inputs=flattened_input, outputs=outputs)
+            
+            # Compile model
+            model.compile(
+                optimizer='adam',
+                loss='binary_crossentropy',
+                metrics=['accuracy', tf.keras.metrics.AUC()]
+            )
+            
+            model.summary()
+            
+            return model
+
+    def get_conv_nn_recent_events(dataloader, granularity, version):
+        # NOTE: Function not completely implemented, used as a quick robustness check.
+        # Please refer to get_conv_nn for full functionality.
+        if granularity == 'per-blob':
+            raise ValueError('Convolutional models are not yet supported for per-blob granularity')
+        
+        # NOTE: From now on, assuming per-disk. Moreover, both options (1d vs 4hr) are treated equally
+        class StackLayer(tf.keras.layers.Layer):
+            def __init__(self, axis=1, **kwargs):
+                super(StackLayer, self).__init__(**kwargs)
+                self.axis = axis
+                
+            def call(self, inputs):
+                return tf.stack(inputs, axis=self.axis)
+        
+        if version == 'cube_simple':
+            """
+            Input format per batch example (all as flattened scalar values immediately following each other)
+            - BLOB_ONE_TIME_INFO
+            x TOP_N_BLOBS
+                -- BLOB_VECTOR_COLUMNS_GENERAL
+                -- 5*5*5*channels (5x5x5 cube)
+            """
+            nx, ny, nz, channels = 200, 400, 100, 3
+
+            complete_input_size = len(dataloader.BLOB_ONE_TIME_INFO) + dataloader.TOP_N_BLOBS * (
+                len(dataloader.BLOB_VECTOR_COLUMNS_GENERAL) + 5 * 5 * 5 * channels)
+            
+            flattened_input = tf.keras.layers.Input(shape=(complete_input_size,))
+
+            # Split the input into the two main parts
+            one_time_info_input = tf.keras.layers.Lambda(lambda x: x[:, :len(dataloader.BLOB_ONE_TIME_INFO)])(flattened_input)
+            # blob_data_input = tf.keras.layers.Lambda(lambda x: x[:, len(dataloader.BLOB_ONE_TIME_INFO):])(flattened_input)
+
+            # Process the one-time info (single small layer, no BatchNorm)
+            one_time_info_output = tf.keras.layers.Dense(1, activation='relu')(one_time_info_input)
+            
+            # Create shared layers for all blobs (much smaller)
+            # Shared layer for blob general info
+            # general_dense = tf.keras.layers.Dense(1, activation='relu')
+            
+            # # Simplified shared layers for cube (fewer filters, no BatchNorm)
+            # cube_conv_layer = tf.keras.layers.Conv3D(2, (3, 3, 3), activation='relu')
+            # cube_dense = tf.keras.layers.Dense(2, activation='relu')
+            
+            # # Process each blob with shared layers
+            # blob_data_output = []
+            # len_each_blob = len(dataloader.BLOB_VECTOR_COLUMNS_GENERAL) + 5 * 5 * 5 * channels
+            
+            # for i in range(dataloader.TOP_N_BLOBS):
+            #     # Extract the blob data for this blob
+            #     start_general_index = i * len(dataloader.BLOB_VECTOR_COLUMNS_GENERAL)
+            #     end_general_index = start_general_index + len(dataloader.BLOB_VECTOR_COLUMNS_GENERAL)
+            #     general_info = tf.keras.layers.Lambda(lambda x: x[:, start_general_index:end_general_index])(blob_data_input)
+                
+            #     # Extract cube data
+            #     start_cube_index = dataloader.TOP_N_BLOBS * len(dataloader.BLOB_VECTOR_COLUMNS_GENERAL) + i * (5 * 5 * 5 * channels)
+            #     end_cube_index = start_cube_index + 5 * 5 * 5 * channels
+            #     cube = tf.keras.layers.Lambda(lambda x: x[:, start_cube_index:end_cube_index])(blob_data_input)
+                
+            #     # Process general info (single small layer)
+            #     general_output = general_dense(general_info)
+                
+            #     # Process cube (single conv layer, single small dense layer)
+            #     cube = tf.keras.layers.Reshape((5, 5, 5, channels))(cube)
+            #     cube_output = cube_conv_layer(cube)
+            #     cube_output = tf.keras.layers.Flatten()(cube_output)
+            #     cube_output = cube_dense(cube_output)
+                
+            #     # Concatenate outputs for this blob
+            #     combined_output = tf.keras.layers.Concatenate()([general_output, cube_output])
+                
+            #     # Add the output to the list
+            #     blob_data_output.append(combined_output)
+            
+            # Aggregate the outputs for each blob by taking the maximum value
+            # blob_data_output = tf.keras.layers.Maximum()(blob_data_output)
+            
+            # Combine the one-time info and blob data outputs
+            # combined_output = tf.keras.layers.Concatenate()([one_time_info_output, blob_data_output])
+            combined_output = one_time_info_input
+            
+            # Final processing (single small layer)
+            combined_output = tf.keras.layers.Dense(2, activation='relu')(combined_output)
+            
+            # Output layer
+            outputs = tf.keras.layers.Dense(1, activation='sigmoid')(combined_output)
+            
+            # Create model
+            model = tf.keras.models.Model(inputs=flattened_input, outputs=outputs)
+            
+            # Compile model
+            model.compile(
+                optimizer='adam',
+                loss='binary_crossentropy',
+                metrics=['accuracy', tf.keras.metrics.AUC()]
+            )
+            
+            model.summary()
+            
+            return model
