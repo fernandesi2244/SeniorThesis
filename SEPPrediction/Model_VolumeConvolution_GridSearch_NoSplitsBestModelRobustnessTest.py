@@ -409,7 +409,7 @@ def main():
                     train_generator = SC_SecondarySEPInputDataGenerator(train_arr, batch_size=32, shuffle=False, granularity=granularity, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
                     val_generator = SC_SecondarySEPInputDataGenerator(val_arr, batch_size=32, shuffle=False, granularity=granularity, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
                     test_generator = SC_SecondarySEPInputDataGenerator(test_arr, batch_size=32, shuffle=False, granularity=granularity, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
-                elif model_type == 'conv_nn_on_cube' or model_type == 'conv_nn_on_cube_simple' or model_type == 'conv_nn_on_cube_complex':
+                elif model_type == 'conv_nn_on_cube' or model_type == 'conv_nn_on_cube_simple' or model_type == 'conv_nn_on_cube_complex' or model_type == 'conv_nn_on_cube_simple_just_cube' or model_type == 'conv_nn_on_cube_simple_recent_events':
                     train_generator = C_SecondarySEPInputDataGenerator(train_arr, batch_size=32, shuffle=False, granularity=granularity, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
                     val_generator = C_SecondarySEPInputDataGenerator(val_arr, batch_size=32, shuffle=False, granularity=granularity, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
                     test_generator = C_SecondarySEPInputDataGenerator(test_arr, batch_size=32, shuffle=False, granularity=granularity, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
