@@ -1729,55 +1729,11 @@ class ModelConstructor(object):
             # blob_data_input = tf.keras.layers.Lambda(lambda x: x[:, len(dataloader.BLOB_ONE_TIME_INFO):])(flattened_input)
 
             # Process the one-time info (single small layer, no BatchNorm)
-            one_time_info_output = tf.keras.layers.Dense(1, activation='relu')(one_time_info_input)
-            
-            # Create shared layers for all blobs (much smaller)
-            # Shared layer for blob general info
-            # general_dense = tf.keras.layers.Dense(1, activation='relu')
-            
-            # # Simplified shared layers for cube (fewer filters, no BatchNorm)
-            # cube_conv_layer = tf.keras.layers.Conv3D(2, (3, 3, 3), activation='relu')
-            # cube_dense = tf.keras.layers.Dense(2, activation='relu')
-            
-            # # Process each blob with shared layers
-            # blob_data_output = []
-            # len_each_blob = len(dataloader.BLOB_VECTOR_COLUMNS_GENERAL) + 5 * 5 * 5 * channels
-            
-            # for i in range(dataloader.TOP_N_BLOBS):
-            #     # Extract the blob data for this blob
-            #     start_general_index = i * len(dataloader.BLOB_VECTOR_COLUMNS_GENERAL)
-            #     end_general_index = start_general_index + len(dataloader.BLOB_VECTOR_COLUMNS_GENERAL)
-            #     general_info = tf.keras.layers.Lambda(lambda x: x[:, start_general_index:end_general_index])(blob_data_input)
-                
-            #     # Extract cube data
-            #     start_cube_index = dataloader.TOP_N_BLOBS * len(dataloader.BLOB_VECTOR_COLUMNS_GENERAL) + i * (5 * 5 * 5 * channels)
-            #     end_cube_index = start_cube_index + 5 * 5 * 5 * channels
-            #     cube = tf.keras.layers.Lambda(lambda x: x[:, start_cube_index:end_cube_index])(blob_data_input)
-                
-            #     # Process general info (single small layer)
-            #     general_output = general_dense(general_info)
-                
-            #     # Process cube (single conv layer, single small dense layer)
-            #     cube = tf.keras.layers.Reshape((5, 5, 5, channels))(cube)
-            #     cube_output = cube_conv_layer(cube)
-            #     cube_output = tf.keras.layers.Flatten()(cube_output)
-            #     cube_output = cube_dense(cube_output)
-                
-            #     # Concatenate outputs for this blob
-            #     combined_output = tf.keras.layers.Concatenate()([general_output, cube_output])
-                
-            #     # Add the output to the list
-            #     blob_data_output.append(combined_output)
-            
-            # Aggregate the outputs for each blob by taking the maximum value
-            # blob_data_output = tf.keras.layers.Maximum()(blob_data_output)
+            one_time_info_output = tf.keras.layers.Dense(2, activation='relu')(one_time_info_input)
             
             # Combine the one-time info and blob data outputs
             # combined_output = tf.keras.layers.Concatenate()([one_time_info_output, blob_data_output])
-            combined_output = one_time_info_input
-            
-            # Final processing (single small layer)
-            combined_output = tf.keras.layers.Dense(2, activation='relu')(combined_output)
+            combined_output = one_time_info_output
             
             # Output layer
             outputs = tf.keras.layers.Dense(1, activation='sigmoid')(combined_output)
