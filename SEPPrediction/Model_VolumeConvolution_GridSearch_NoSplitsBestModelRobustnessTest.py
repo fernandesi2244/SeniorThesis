@@ -485,32 +485,32 @@ def main():
                 results_df = pd.DataFrame(all_results)
                 results_df.to_csv(f'{RESULTS_DIR}/{NAME}_all_results_so_far.csv', index=False)
                 
-                train_generator = C_SecondarySEPInputDataGenerator(train_arr, batch_size=32, shuffle=False, granularity=granularity, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
-                val_generator = C_SecondarySEPInputDataGenerator(val_arr, batch_size=32, shuffle=False, granularity=granularity, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
+                # train_generator = C_SecondarySEPInputDataGenerator(train_arr, batch_size=32, shuffle=False, granularity=granularity, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
+                # val_generator = C_SecondarySEPInputDataGenerator(val_arr, batch_size=32, shuffle=False, granularity=granularity, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
                 
-                # Check metrics on train data
-                y_train_pred_proba = model.predict(train_generator)
-                y_train_pred = (y_train_pred_proba > 0.5).astype(int)
+                # # Check metrics on train data
+                # y_train_pred_proba = model.predict(train_generator)
+                # y_train_pred = (y_train_pred_proba > 0.5).astype(int)
                 
-                train_metrics = evaluate_model(y_train, y_train_pred, y_train_pred_proba, "Train")
+                # train_metrics = evaluate_model(y_train, y_train_pred, y_train_pred_proba, "Train")
                 
-                print(f'\nTrain Metrics:')
-                print(f'Accuracy: {train_metrics["accuracy"]:.4f}')
-                print(f'Precision: {train_metrics["precision"]:.4f}')
-                print(f'Recall: {train_metrics["recall"]:.4f}')
-                print(f'F1 Score: {train_metrics["f1"]:.4f}')
+                # print(f'\nTrain Metrics:')
+                # print(f'Accuracy: {train_metrics["accuracy"]:.4f}')
+                # print(f'Precision: {train_metrics["precision"]:.4f}')
+                # print(f'Recall: {train_metrics["recall"]:.4f}')
+                # print(f'F1 Score: {train_metrics["f1"]:.4f}')
                 
-                # Check metrics on val data
-                y_val_pred_proba = model.predict(val_generator)
-                y_val_pred = (y_val_pred_proba > 0.5).astype(int)
+                # # Check metrics on val data
+                # y_val_pred_proba = model.predict(val_generator)
+                # y_val_pred = (y_val_pred_proba > 0.5).astype(int)
 
-                val_metrics = evaluate_model(y_val, y_val_pred, y_val_pred_proba, "Validation")
+                # val_metrics = evaluate_model(y_val, y_val_pred, y_val_pred_proba, "Validation")
                 
-                print(f'\nValidation Metrics:')
-                print(f'Accuracy: {val_metrics["accuracy"]:.4f}')
-                print(f'Precision: {val_metrics["precision"]:.4f}')
-                print(f'Recall: {val_metrics["recall"]:.4f}')
-                print(f'F1 Score: {val_metrics["f1"]:.4f}')
+                # print(f'\nValidation Metrics:')
+                # print(f'Accuracy: {val_metrics["accuracy"]:.4f}')
+                # print(f'Precision: {val_metrics["precision"]:.4f}')
+                # print(f'Recall: {val_metrics["recall"]:.4f}')
+                # print(f'F1 Score: {val_metrics["f1"]:.4f}')
                 
                 # # Check metrics on test data
                 # y_test_pred_proba = model.predict(test_generator)
