@@ -23,7 +23,7 @@ from PhotosphericDataLoader import SEPInputDataGenerator
 from ModelConstructor import ModelConstructor
 
 # leave this the same for access to datasets from 2nd round of grid search
-NAME = 'sep_prediction_photospheric_data_produce_best_model'
+NAME = 'sep_prediction_photospheric_data_grid_search2'
 
 # Create output directory for results
 RESULTS_DIR = f'results/photospheric_data'
