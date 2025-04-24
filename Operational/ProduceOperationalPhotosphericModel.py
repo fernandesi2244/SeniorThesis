@@ -272,26 +272,26 @@ def load_data(granularity, split_seed):
         X_train, y_train, X_val, y_val, X_test, y_test: Data arrays
     """
     if granularity == 'per-blob':
-        train_features_file = f'{NAME}_X_train_data_per_blob_split{split_seed}.npy'
-        train_labels_file = f'{NAME}_y_train_data_per_blob_split{split_seed}.npy'
-        val_features_file = f'{NAME}_val_data_per_blob_split{split_seed}.npy'
-        val_labels_file = f'{NAME}_val_labels_per_blob_split{split_seed}.npy'
-        test_features_file = f'{NAME}_test_data_per_blob_split{split_seed}.npy'
-        test_labels_file = f'{NAME}_test_labels_per_blob_split{split_seed}.npy'
+        train_features_file = f'../SEPPrediction/{NAME}_X_train_data_per_blob_split{split_seed}.npy'
+        train_labels_file = f'../SEPPrediction/{NAME}_y_train_data_per_blob_split{split_seed}.npy'
+        val_features_file = f'../SEPPrediction/{NAME}_val_data_per_blob_split{split_seed}.npy'
+        val_labels_file = f'../SEPPrediction/{NAME}_val_labels_per_blob_split{split_seed}.npy'
+        test_features_file = f'../SEPPrediction/{NAME}_test_data_per_blob_split{split_seed}.npy'
+        test_labels_file = f'../SEPPrediction/{NAME}_test_labels_per_blob_split{split_seed}.npy'
     elif granularity == 'per-disk-4hr':
-        train_features_file = f'{NAME}_X_train_data_per_disk_4hr_split{split_seed}.npy'
-        train_labels_file = f'{NAME}_y_train_data_per_disk_4hr_split{split_seed}.npy'
-        val_features_file = f'{NAME}_val_data_per_disk_4hr_split{split_seed}.npy'
-        val_labels_file = f'{NAME}_val_labels_per_disk_4hr_split{split_seed}.npy'
-        test_features_file = f'{NAME}_test_data_per_disk_4hr_split{split_seed}.npy'
-        test_labels_file = f'{NAME}_test_labels_per_disk_4hr_split{split_seed}.npy'
+        train_features_file = f'../SEPPrediction/{NAME}_X_train_data_per_disk_4hr_split{split_seed}.npy'
+        train_labels_file = f'../SEPPrediction/{NAME}_y_train_data_per_disk_4hr_split{split_seed}.npy'
+        val_features_file = f'../SEPPrediction/{NAME}_val_data_per_disk_4hr_split{split_seed}.npy'
+        val_labels_file = f'../SEPPrediction/{NAME}_val_labels_per_disk_4hr_split{split_seed}.npy'
+        test_features_file = f'../SEPPrediction/{NAME}_test_data_per_disk_4hr_split{split_seed}.npy'
+        test_labels_file = f'../SEPPrediction/{NAME}_test_labels_per_disk_4hr_split{split_seed}.npy'
     elif granularity == 'per-disk-1d':
-        train_features_file = f'{NAME}_X_train_data_per_disk_1d_split{split_seed}.npy'
-        train_labels_file = f'{NAME}_y_train_data_per_disk_1d_split{split_seed}.npy'
-        val_features_file = f'{NAME}_val_data_per_disk_1d_split{split_seed}.npy'
-        val_labels_file = f'{NAME}_val_labels_per_disk_1d_split{split_seed}.npy'
-        test_features_file = f'{NAME}_test_data_per_disk_1d_split{split_seed}.npy'
-        test_labels_file = f'{NAME}_test_labels_per_disk_1d_split{split_seed}.npy'
+        train_features_file = f'../SEPPrediction/{NAME}_X_train_data_per_disk_1d_split{split_seed}.npy'
+        train_labels_file = f'../SEPPrediction/{NAME}_y_train_data_per_disk_1d_split{split_seed}.npy'
+        val_features_file = f'../SEPPrediction/{NAME}_val_data_per_disk_1d_split{split_seed}.npy'
+        val_labels_file = f'../SEPPrediction/{NAME}_val_labels_per_disk_1d_split{split_seed}.npy'
+        test_features_file = f'../SEPPrediction/{NAME}_test_data_per_disk_1d_split{split_seed}.npy'
+        test_labels_file = f'../SEPPrediction/{NAME}_test_labels_per_disk_1d_split{split_seed}.npy'
     else:
         raise ValueError(f"Invalid granularity: {granularity}")
     
