@@ -1,5 +1,3 @@
-from PhotosphericDataLoader import SEPInputDataGenerator
-from ModelConstructor import ModelConstructor
 import pandas as pd
 import numpy as np
 import time
@@ -15,6 +13,14 @@ from imblearn.under_sampling import RandomUnderSampler
 import os
 import random
 from sklearn.utils import shuffle
+import sys
+import pathlib
+
+rootDir = pathlib.Path(__file__).resolve().parent.parent.absolute()
+sys.path.insert(1, os.path.join(rootDir, 'SEPPrediction'))
+
+from PhotosphericDataLoader import SEPInputDataGenerator
+from ModelConstructor import ModelConstructor
 
 # leave this the same for access to datasets from 2nd round of grid search
 NAME = 'sep_prediction_photospheric_data_produce_best_model'
