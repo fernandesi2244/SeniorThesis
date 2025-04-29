@@ -15,40 +15,51 @@ import random
 from sklearn.utils import shuffle
 import sys
 import pathlib
+import argparse
 
 rootDir = pathlib.Path(__file__).resolve().parent.parent.absolute()
 sys.path.insert(1, os.path.join(rootDir, 'SEPPrediction'))
 
-from PhotosphericDataLoader import SEPInputDataGenerator
 from ModelConstructor import ModelConstructor
 
-# leave this the same for access to datasets from 2nd round of grid search
-NAME = 'sep_prediction_photospheric_data_grid_search2'
+# Import will be dynamically selected based on data_loader_type
+# from PhotosphericDataLoader import SEPInputDataGenerator
+# from CoronalDataLoader import SEPInputDataGenerator 
+# from NumericDataLoader import SEPInputDataGenerator
 
 # Create output directory for results
-RESULTS_DIR = f'results/photospheric_data'
+RESULTS_DIR = f'results/sep_model_results'
 os.makedirs(RESULTS_DIR, exist_ok=True)
 
-# Number of different dataset splits to use
-NUM_SPLITS = 5
-# Define random seeds for each split
-SPLIT_SEEDS = [42] #, 123, 456, 789, 1010]
-
 # Set random seed for reproducibility
-random.seed(42)
-np.random.seed(42)
+SEED = 42
+random.seed(SEED)
+np.random.seed(SEED)
+
+# Best hyperparameters (as specified in the original code)
+BEST_MODEL_TYPE = 'random_forest_complex'
+BEST_GRANULARITY = 'per-disk-4hr'
+BEST_OVERSAMPLING_RATIO = 0.55
+BEST_FEATURE_COUNT = 90
+BEST_COMPONENT_COUNT = -1  # No PCA
 
 # Multiprocessing setup
 cpus_to_use = max(int(multiprocessing.cpu_count() * 0.9), 1)
 print('Using', cpus_to_use, 'CPUs.')
 
-def build_feature_names(granularity):
+def build_feature_names(granularity, data_loader_module):
     """
     Build a list of feature names based on the SEPInputDataGenerator's column definitions.
     
+    Args:
+        granularity: Data granularity ('per-blob', 'per-disk-4hr', or 'per-disk-1d')
+        data_loader_module: The imported data loader module
+        
     Returns:
         List of feature names
     """
+    SEPInputDataGenerator = data_loader_module.SEPInputDataGenerator
+    
     if granularity == 'per-blob':
         # One-time features
         feature_names = list(SEPInputDataGenerator.BLOB_ONE_TIME_INFO)
@@ -140,12 +151,16 @@ def evaluate_model(y_true, y_pred, y_pred_proba, set_name=""):
     hss = 2 * (TP * TN - FN * FP) / ((TP + FN) * (FN + TN) + (TP + FP) * (TN + FP))
     tss = TP / (TP + FN) - FP / (FP + TN)
     
+    # Calculate F0.5 score (more weight on precision)
+    f_half = (1 + 0.5**2) * (precision * recall) / ((0.5**2 * precision) + recall) if (precision + recall) > 0 else 0
+    
     # Print metrics
     print(f'{set_name} Results:')
     print(f'Accuracy: {accuracy:.4f}')
     print(f'Precision: {precision:.4f}')
     print(f'Recall: {recall:.4f}')
     print(f'F1 Score: {f1:.4f}')
+    print(f'F0.5 Score: {f_half:.4f}')
     print(f'AUC: {auc:.4f}')
     print(f'HSS: {hss:.4f}')
     print(f'TSS: {tss:.4f}')
@@ -158,67 +173,14 @@ def evaluate_model(y_true, y_pred, y_pred_proba, set_name=""):
         'precision': precision,
         'recall': recall,
         'f1': f1,
+        'f_half': f_half,
         'auc': auc,
         'hss': hss,
         'tss': tss,
         'confusion_matrix': cm
     }
 
-def evaluate_from_combined_confusion_matrix(combined_cm, set_name=""):
-    """
-    Calculate metrics from a combined confusion matrix
-    
-    Args:
-        combined_cm: The combined confusion matrix from multiple splits
-        set_name: Name of the dataset being evaluated
-        
-    Returns:
-        Dictionary of metrics
-    """
-    TN, FP, FN, TP = combined_cm.ravel()
-    
-    # Calculate metrics directly from confusion matrix
-    accuracy = (TP + TN) / (TP + TN + FP + FN)
-    precision = TP / (TP + FP) if (TP + FP) > 0 else 0
-    recall = TP / (TP + FN) if (TP + FN) > 0 else 0
-    f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
-    
-    # Calculate HSS and TSS
-    hss = 2 * (TP * TN - FN * FP) / ((TP + FN) * (FN + TN) + (TP + FP) * (TN + FP))
-    tss = TP / (TP + FN) - FP / (FP + TN) if (TP + FN) > 0 and (FP + TN) > 0 else 0
-    
-    # For AUC, we can't easily compute it from just a confusion matrix without the probabilities
-    # We'll set it to None for now
-    auc = None
-    
-    def get_f_half(precision, recall):
-        return (1 + 0.5**2) * (precision * recall) / ((0.5**2 * precision) + recall)
-    
-    # Print metrics
-    print(f'{set_name} Results from Combined Confusion Matrix:')
-    print(f'Accuracy: {accuracy:.4f}')
-    print(f'Precision: {precision:.4f}')
-    print(f'Recall: {recall:.4f}')
-    print(f'F1 Score: {f1:.4f}')
-    print(f'F-0.5 Score: {get_f_half(precision, recall):.4f}')
-    print(f'HSS: {hss:.4f}')
-    print(f'TSS: {tss:.4f}')
-    print(f'Combined Confusion Matrix:')
-    print(combined_cm)
-    
-    # Return metrics as dictionary
-    return {
-        'accuracy': accuracy,
-        'precision': precision,
-        'recall': recall,
-        'f1': f1,
-        'auc': auc,  # Will be None
-        'hss': hss,
-        'tss': tss,
-        'confusion_matrix': combined_cm
-    }
-
-def feature_selection(X_train, y_train, feature_names, split_seed):
+def feature_selection(X_train, y_train, feature_names):
     """
     Perform feature selection using Random Forest
     
@@ -226,7 +188,6 @@ def feature_selection(X_train, y_train, feature_names, split_seed):
         X_train: Training data
         y_train: Training labels
         feature_names: List of feature names
-        split_seed: the random split currently being used
         
     Returns:
         Indices of features sorted by importance
@@ -239,7 +200,7 @@ def feature_selection(X_train, y_train, feature_names, split_seed):
         max_depth=15,
         min_samples_split=5,
         min_samples_leaf=2,
-        random_state=42,
+        random_state=SEED,
         n_jobs=cpus_to_use
     )
     
@@ -261,530 +222,271 @@ def feature_selection(X_train, y_train, feature_names, split_seed):
     feature_indices = [feature_names.index(feature) for feature in feature_importance_df['Feature']]
     
     # Save feature importance
-    feature_importance_df.to_csv(f'{RESULTS_DIR}/{NAME}_feature_importance_split{split_seed}.csv', index=False)
+    feature_importance_df.to_csv(f'{RESULTS_DIR}/feature_importance.csv', index=False)
     
     # Return indices of features sorted by importance
     return feature_indices
 
-def load_data(granularity, split_seed):
+def prepare_data(train_df, test_df, granularity, data_loader_module, oversampling_ratio):
     """
-    Load data for a specific granularity and split seed
+    Prepare data for training and evaluation
     
     Args:
-        granularity: Data granularity ('per-blob', 'per-disk-4hr', or 'per-disk-1d')
-        split_seed: Random seed for train/test split
+        train_df: Training dataframe
+        test_df: Test dataframe
+        granularity: Data granularity
+        data_loader_module: Imported data loader module
+        oversampling_ratio: Ratio for oversampling positive class
         
     Returns:
-        X_train, y_train, X_val, y_val, X_test, y_test: Data arrays
+        X_train_pca, y_train, X_test_pca, y_test, model_data: Prepared data and model artifacts
     """
-    if granularity == 'per-blob':
-        train_features_file = f'../SEPPrediction/{NAME}_X_train_data_per_blob_split{split_seed}.npy'
-        train_labels_file = f'../SEPPrediction/{NAME}_y_train_data_per_blob_split{split_seed}.npy'
-        val_features_file = f'../SEPPrediction/{NAME}_val_data_per_blob_split{split_seed}.npy'
-        val_labels_file = f'../SEPPrediction/{NAME}_val_labels_per_blob_split{split_seed}.npy'
-        test_features_file = f'../SEPPrediction/{NAME}_test_data_per_blob_split{split_seed}.npy'
-        test_labels_file = f'../SEPPrediction/{NAME}_test_labels_per_blob_split{split_seed}.npy'
-    elif granularity == 'per-disk-4hr':
-        train_features_file = f'../SEPPrediction/{NAME}_X_train_data_per_disk_4hr_split{split_seed}.npy'
-        train_labels_file = f'../SEPPrediction/{NAME}_y_train_data_per_disk_4hr_split{split_seed}.npy'
-        val_features_file = f'../SEPPrediction/{NAME}_val_data_per_disk_4hr_split{split_seed}.npy'
-        val_labels_file = f'../SEPPrediction/{NAME}_val_labels_per_disk_4hr_split{split_seed}.npy'
-        test_features_file = f'../SEPPrediction/{NAME}_test_data_per_disk_4hr_split{split_seed}.npy'
-        test_labels_file = f'../SEPPrediction/{NAME}_test_labels_per_disk_4hr_split{split_seed}.npy'
-    elif granularity == 'per-disk-1d':
-        train_features_file = f'../SEPPrediction/{NAME}_X_train_data_per_disk_1d_split{split_seed}.npy'
-        train_labels_file = f'../SEPPrediction/{NAME}_y_train_data_per_disk_1d_split{split_seed}.npy'
-        val_features_file = f'../SEPPrediction/{NAME}_val_data_per_disk_1d_split{split_seed}.npy'
-        val_labels_file = f'../SEPPrediction/{NAME}_val_labels_per_disk_1d_split{split_seed}.npy'
-        test_features_file = f'../SEPPrediction/{NAME}_test_data_per_disk_1d_split{split_seed}.npy'
-        test_labels_file = f'../SEPPrediction/{NAME}_test_labels_per_disk_1d_split{split_seed}.npy'
+    # Import SEPInputDataGenerator class from the appropriate module
+    SEPInputDataGenerator = data_loader_module.SEPInputDataGenerator
+    
+    # Create the data generators
+    print('\nCreating data generators...')
+    batch_size = 64
+    train_generator = SEPInputDataGenerator(
+        train_df, batch_size, False, granularity, 
+        use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2
+    )
+    test_generator = SEPInputDataGenerator(
+        test_df, batch_size, False, granularity, 
+        use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2
+    )
+    
+    # Extract all data from generators
+    print('\nExtracting data from generators...')
+    X_train, y_train = extract_all_data(train_generator)
+    X_test, y_test = extract_all_data(test_generator)
+    
+    # Check for NaN and Inf values
+    print('\nChecking for NaN and Inf values:')
+    print(f'Train NaN count: {np.isnan(X_train).sum()}, Inf count: {np.isinf(X_train).sum()}')
+    print(f'Test NaN count: {np.isnan(X_test).sum()}, Inf count: {np.isinf(X_test).sum()}')
+    
+    # Replace any NaN or Inf values with 0
+    X_train = np.nan_to_num(X_train, nan=0.0, posinf=0.0, neginf=0.0)
+    X_test = np.nan_to_num(X_test, nan=0.0, posinf=0.0, neginf=0.0)
+
+    # Standardize the features
+    scaler = StandardScaler()
+    X_train = scaler.fit_transform(X_train)
+    X_test = scaler.transform(X_test)
+    
+    # Apply class balancing to training set
+    print('\nBefore resampling:')
+    print('Train set count:', len(X_train))
+    print('Train set SEP count:', np.sum(y_train))
+    print('Test set count:', len(X_test))
+    print('Test set SEP count:', np.sum(y_test))
+    
+    # Over-sample minority class
+    ros = RandomOverSampler(sampling_strategy=oversampling_ratio/2, random_state=SEED)
+    X_train_resampled, y_train_resampled = ros.fit_resample(X_train, y_train)
+    
+    # Under-sample majority class
+    rus = RandomUnderSampler(sampling_strategy=oversampling_ratio, random_state=SEED)
+    X_train_resampled, y_train_resampled = rus.fit_resample(X_train_resampled, y_train_resampled)
+
+    # Reshuffle the data
+    X_train_resampled, y_train_resampled = shuffle(X_train_resampled, y_train_resampled, random_state=SEED)
+    
+    print('After resampling:')
+    print('Train set count:', len(X_train_resampled))
+    print('Train set SEP count:', np.sum(y_train_resampled))
+    
+    # Build feature names for interpretation
+    feature_names = build_feature_names(granularity, data_loader_module)
+    
+    # Run feature selection
+    feature_indices = feature_selection(X_train_resampled, y_train_resampled, feature_names)
+    selected_features = [feature_names[i] for i in feature_indices]
+    
+    # Get the top n features
+    n_features = BEST_FEATURE_COUNT
+    if n_features > len(feature_indices):
+        print(f"Warning: Requested {n_features} features, but only {len(feature_indices)} available. Using all available features.")
+        n_features = len(feature_indices)
+    
+    selected_indices = feature_indices[:n_features]
+    selected_feature_names = [feature_names[i] for i in selected_indices]
+    
+    # Extract data with selected features
+    X_train_selected = X_train_resampled[:, selected_indices]
+    X_test_selected = X_test[:, selected_indices]
+    
+    # Apply PCA if needed
+    if BEST_COMPONENT_COUNT != -1:
+        # Make sure n_components doesn't exceed the number of features or samples
+        n_components_actual = min(BEST_COMPONENT_COUNT, min(n_features, X_train_selected.shape[0]))
+        
+        # Apply PCA
+        pca = PCA(n_components=n_components_actual, random_state=SEED)
+        X_train_pca = pca.fit_transform(X_train_selected)
+        X_test_pca = pca.transform(X_test_selected)
+        
+        # Calculate variance explained
+        explained_variance = np.sum(pca.explained_variance_ratio_) * 100
+        print(f'PCA explained variance: {explained_variance:.2f}%')
     else:
-        raise ValueError(f"Invalid granularity: {granularity}")
+        pca = None
+        X_train_pca = X_train_selected
+        X_test_pca = X_test_selected
     
-    if os.path.exists(test_labels_file):
-        # assuming all files exist if the last-generated one does
-        X_train = np.load(train_features_file)
-        y_train = np.load(train_labels_file)
-        X_val = np.load(val_features_file)
-        y_val = np.load(val_labels_file)
-        X_test = np.load(test_features_file)
-        y_test = np.load(test_labels_file)
-    else:
-        # Load dataset
-        blob_df_filename = '../OutputData/UnifiedActiveRegionData_with_updated_SEP_list_but_no_line_count.csv'
-        blob_df = pd.read_csv(blob_df_filename)
-        
-        print(f"Loaded dataset with {len(blob_df)} rows")
-        
-        # Preprocess the data
-        blob_df['Produced an SEP'] = (blob_df['Number of SEPs Produced'] > 0) * 1  # 1 if produced, 0 otherwise
-        blob_df['Year'] = blob_df['Filename General'].apply(lambda x: x.split('.')[3][0:4])
-        blob_df['Is Plage'] = blob_df['Is Plage'].astype(int)
-        blob_df['Most Probable AR Num'] = blob_df['Relevant Active Regions'].apply(lambda x: x.strip("[]'").split(',')[0])
-        
-        # Split the data by year to maintain the same structure as in the original scripts
-        # But use the provided split_seed for reproducibility
-        years = blob_df['Year'].unique()
-        train_df = pd.DataFrame()
-        val_df = pd.DataFrame()
-        test_df = pd.DataFrame()
-        
-        for year in years:
-            blobs_in_year = blob_df[blob_df['Year'] == year]
-            print(f'Year: {year}, Number of blobs: {len(blobs_in_year)}')
-            print(f'Number of SEPs: {blobs_in_year["Produced an SEP"].sum()}')
-        
-            # Group by active region to prevent data leakage
-            grouped = blobs_in_year.groupby('Most Probable AR Num')['Produced an SEP'].max()
-        
-            # Handle special case with only one SEP-producing active region
-            if grouped[grouped == 1].count() == 1:
-                min_train_regions = grouped[grouped == 1].index
-                remaining_train_regions, test_regions = train_test_split(
-                    grouped[grouped == 0].index, test_size=0.2, random_state=42
-                )
-                train_regions = np.concatenate([min_train_regions, remaining_train_regions])
-            else:
-                train_regions, test_regions = train_test_split(
-                    grouped.index, test_size=0.2, stratify=grouped, random_state=42
-                )
-        
-            # Select records based on their active region
-            train_from_year = blobs_in_year[blobs_in_year['Most Probable AR Num'].isin(train_regions)]
-            test_from_year = blobs_in_year[blobs_in_year['Most Probable AR Num'].isin(test_regions)]
-        
-            # Further split train into train and validation
-            grouped_train = train_from_year.groupby('Most Probable AR Num')['Produced an SEP'].max()
-            
-            if grouped_train[grouped_train == 1].count() == 1:
-                min_train_regions = grouped_train[grouped_train == 1].index
-                remaining_train_regions, val_regions = train_test_split(
-                    grouped_train[grouped_train == 0].index, test_size=0.25, random_state=split_seed
-                )
-                train_regions = np.concatenate([min_train_regions, remaining_train_regions])
-            else:
-                train_regions, val_regions = train_test_split(
-                    grouped_train.index, test_size=0.25, stratify=grouped_train, random_state=split_seed
-                )
-        
-            new_train_from_year = train_from_year[train_from_year['Most Probable AR Num'].isin(train_regions)]
-            val_from_year = train_from_year[train_from_year['Most Probable AR Num'].isin(val_regions)]
-        
-            # Print statistics
-            print(f'Train set: {len(new_train_from_year)}, Val set: {len(val_from_year)}, Test set: {len(test_from_year)}')
-            print(f'Train SEPs: {new_train_from_year["Produced an SEP"].sum()}, Val SEPs: {val_from_year["Produced an SEP"].sum()}, Test SEPs: {test_from_year["Produced an SEP"].sum()}')
-        
-            if len(new_train_from_year) > 0 and len(val_from_year) > 0 and len(test_from_year) > 0:
-                train_df = pd.concat([train_df, new_train_from_year])
-                val_df = pd.concat([val_df, val_from_year])
-                test_df = pd.concat([test_df, test_from_year])
-            else:
-                print(f'Year {year} has insufficient data in one of the sets. Skipping.')
-        
-        # Create the data generators (right now, just being used to get timeseries data)
-        print('\nCreating data generators...')
-        batch_size = 64
-        train_generator = SEPInputDataGenerator(train_df, batch_size, False, granularity, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
-        val_generator = SEPInputDataGenerator(val_df, batch_size, False, granularity, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
-        test_generator = SEPInputDataGenerator(test_df, batch_size, False, granularity, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
-        
-        # Extract all data from generators
-        print('\nExtracting data from generators...')
-        X_train, y_train = extract_all_data(train_generator)
-        X_val, y_val = extract_all_data(val_generator)
-        X_test, y_test = extract_all_data(test_generator)
-
-        # Save the data with split_seed in filename
-        np.save(train_features_file, X_train)
-        np.save(train_labels_file, y_train)
-
-        np.save(val_features_file, X_val)
-        np.save(val_labels_file, y_val)
-
-        np.save(test_features_file, X_test)
-        np.save(test_labels_file, y_test)
-
-    return X_train, y_train, X_val, y_val, X_test, y_test
-
-def main():
-    """Main function to run the grid search with multiple splits"""
-    start_time = time.time()
-    print(f"Starting photospheric data grid search with multiple splits at {time.ctime()}")
-
-    granularities = ['per-disk-4hr']
-    oversampling_ratios = [0.55]
-    feature_counts = [90]
-    component_counts = [-1]
-    
-    model_types = [
-        'random_forest_complex',
-    ]
-
-    # TODO: Look at ensembling techniques
-
-    # Create a list to store all results
-    all_results = []
-
-    for model_type in model_types:
-        print('\n' + '-'*50)
-        print(f'\nEvaluating model: {model_type}')
-        print('-'*50)
-
-        for granularity in granularities:
-            print('\n' + '-'*50)
-            print(f'\nEvaluating granularity: {granularity}')
-            print('-'*50)
-            
-            # Build feature names for interpretation
-            feature_names = build_feature_names(granularity)
-
-            for oversampling_ratio in oversampling_ratios:
-                print('\n' + '-'*50)
-                print(f'\nEvaluating oversampling ratio: {oversampling_ratio}')
-                print('-'*50)
-                
-                # For each feature count
-                for n_features in feature_counts:
-                    print('\n' + '-'*50)
-                    print(f'\nEvaluating feature count: {n_features}')
-                    print('-'*50)
-                    
-                    # For each PCA component count
-                    for n_components in component_counts:
-                        print('\n' + '-'*50)
-                        print(f'\nEvaluating component count: {n_components}')
-                        print('-'*50)
-
-                        if n_features != -1 and n_components > n_features:
-                            print(f"Skipping PCA with {n_components} components as it exceeds the number of features {n_features}.")
-                            continue
-                            
-                        # Lists to store confusion matrices across splits
-                        val_cms = []
-                        test_cms = []
-                        
-                        # Train and evaluate models for each split
-                        for split_idx, split_seed in enumerate(SPLIT_SEEDS):
-                            print('\n' + '-'*50)
-                            print(f'\nTraining on split {split_idx+1}/{len(SPLIT_SEEDS)} with seed {split_seed}')
-                            print('-'*50)
-                            
-                            # Define model name with split information
-                            model_name = f"{NAME}_{granularity}_{oversampling_ratio}_{model_type}_{n_features}_{n_components}_split{split_seed}"
-                            
-                            # Load the data for this split
-                            X_train_OG, y_train_OG, X_val, y_val, X_test, y_test = load_data(granularity, split_seed)
-                            
-                            # Concatenate training, val, and test data to obtain operational model
-                            X_train_OG = np.concatenate([X_train_OG, X_val, X_test])
-                            y_train_OG = np.concatenate([y_train_OG, y_val, y_test])
-
-                            # Check for NaN and Inf values
-                            print('\nChecking for NaN and Inf values:')
-                            print(f'Train NaN count: {np.isnan(X_train_OG).sum()}, Inf count: {np.isinf(X_train_OG).sum()}')
-                            print(f'Val NaN count: {np.isnan(X_val).sum()}, Inf count: {np.isinf(X_val).sum()}')
-                            print(f'Test NaN count: {np.isnan(X_test).sum()}, Inf count: {np.isinf(X_test).sum()}')
-                            
-                            # Replace any NaN or Inf values with 0
-                            X_train_OG = np.nan_to_num(X_train_OG, nan=0.0, posinf=0.0, neginf=0.0)
-                            X_val = np.nan_to_num(X_val, nan=0.0, posinf=0.0, neginf=0.0)
-                            X_test = np.nan_to_num(X_test, nan=0.0, posinf=0.0, neginf=0.0)
-
-                            # Standardize the features
-                            scaler = StandardScaler()
-                            X_train_OG = scaler.fit_transform(X_train_OG)
-                            X_val = scaler.transform(X_val)
-                            X_test = scaler.transform(X_test)
-                            
-                            # Apply resampling if needed
-                            # Apply class balancing to training set
-                            print('\nBefore resampling:')
-                            print('Train set count:', len(X_train_OG))
-                            print('Train set SEP count:', np.sum(y_train_OG))
-                            print('Test set count:', len(X_test))
-                            print('Test set SEP count:', np.sum(y_test))
-
-                            # if oversampling ratio is less than or equal to the current ratio, skip this configuration
-                            if oversampling_ratio <= np.sum(y_train_OG) / (len(y_train_OG) - np.sum(y_train_OG)):
-                                print(f"Skipping oversampling ratio {oversampling_ratio} as positive class already significant enough.")
-                                continue
-                            
-                            # Over-sample minority class
-                            ros = RandomOverSampler(sampling_strategy=oversampling_ratio/2, random_state=split_seed)
-                            X_train, y_train = ros.fit_resample(X_train_OG, y_train_OG)
-                            
-                            # Under-sample majority class
-                            rus = RandomUnderSampler(sampling_strategy=oversampling_ratio, random_state=split_seed)
-                            X_train, y_train = rus.fit_resample(X_train, y_train)
-
-                            # Reshuffle the data
-                            X_train, y_train = shuffle(X_train, y_train, random_state=split_seed)
-                            
-                            print('After resampling:')
-                            print('Train set count:', len(X_train))
-                            print('Train set SEP count:', np.sum(y_train))
-                            
-                            # Run feature selection
-                            feature_indices = feature_selection(X_train, y_train, feature_names, split_seed)
-                            selected_features = [feature_names[i] for i in feature_indices]
-                            
-                            # Check if we have enough features
-                            if n_features == -1:
-                                print('Using all features...')
-                                n_features = len(feature_indices)
-
-                            if n_features > len(feature_indices):
-                                if -1 in feature_counts:
-                                    print('Already using all features, skipping...')
-                                    continue
-                                else:
-                                    print(f"Warning: Requested {n_features} features, but only {len(feature_indices)} available. Using all available features.")
-                                    n_features = len(feature_indices)
-                            
-                            # Get the top n features
-                            selected_indices = feature_indices[:n_features]
-                            
-                            # Extract data with selected features
-                            X_train_selected = X_train[:, selected_indices]
-                            X_val_selected = X_val[:, selected_indices]
-                            X_test_selected = X_test[:, selected_indices]
-                            
-                            # Apply PCA if needed
-                            if n_components != -1:
-                                # Make sure n_components doesn't exceed the number of features or samples
-                                n_components_actual = min(n_components, min(n_features, X_train_selected.shape[0]))
-                                
-                                # Apply PCA
-                                pca = PCA(n_components=n_components_actual, random_state=split_seed)
-                                X_train_pca = pca.fit_transform(X_train_selected)
-                                X_val_pca = pca.transform(X_val_selected)
-                                X_test_pca = pca.transform(X_test_selected)
-                                
-                                # Calculate variance explained
-                                explained_variance = np.sum(pca.explained_variance_ratio_) * 100
-                            else:
-                                pca = None
-                                X_train_pca = X_train_selected
-                                X_val_pca = X_val_selected
-                                X_test_pca = X_test_selected
-                                explained_variance = 100
-                            
-                            # Create the model
-                            if model_type == 'isolation_forest':
-                                percent_pos = np.sum(y_train) / len(y_train)
-                                model = ModelConstructor.create_model('photospheric', model_type, granularity, n_components, contamination=percent_pos, num_features=n_features)
-                            else:
-                                model = ModelConstructor.create_model('photospheric', model_type, granularity, n_components, num_features=n_features)
-                            
-                            # Train the model
-                            train_start = time.time()
-                            model.fit(X_train_pca, y_train)
-                            train_end = time.time()
-                            print(f'Model {model_type} trained in {train_end - train_start:.2f} seconds for split {split_idx+1}')
-                            
-                            # Make predictions on validation set
-                            if model_type == 'isolation_forest':
-                                # y_pred is 1 for inliers, -1 for outliers, but we want
-                                # 1 for outliers and 0 for inliers
-                                y_val_pred = model.predict(X_val_pca)
-                                y_val_pred[y_val_pred == 1] = 0
-                                y_val_pred[y_val_pred == -1] = 1
-                                
-                                anomaly_scores = model.decision_function(X_val_pca)
-                                y_val_pred_proba = (anomaly_scores - np.min(anomaly_scores)) / (np.max(anomaly_scores) - np.min(anomaly_scores))
-                            elif model_type == 'nn_simple' or model_type == 'nn_complex':
-                                y_val_pred_proba = model.predict(X_val_pca)
-                                # Assume 0.5 threshold for now
-                                y_val_pred = (y_val_pred_proba > 0.5).astype(int)
-                            else:
-                                y_val_pred = model.predict(X_val_pca)
-                                y_val_pred_proba = model.predict_proba(X_val_pca)[:, 1]
-                            
-                            # Get validation confusion matrix for this split
-                            val_cm = confusion_matrix(y_val, y_val_pred)
-                            val_cms.append(val_cm)
-                            
-                            print(f"Validation confusion matrix for split {split_idx+1}:")
-                            print(val_cm)
-                            
-                            # Make predictions on test set
-                            if model_type == 'isolation_forest':
-                                y_test_pred = model.predict(X_test_pca)
-                                y_test_pred[y_test_pred == 1] = 0
-                                y_test_pred[y_test_pred == -1] = 1
-                                
-                                anomaly_scores = model.decision_function(X_test_pca)
-                                y_test_pred_proba = (anomaly_scores - np.min(anomaly_scores)) / (np.max(anomaly_scores) - np.min(anomaly_scores))
-                            elif model_type == 'nn_simple' or model_type == 'nn_complex':
-                                y_test_pred_proba = model.predict(X_test_pca)
-                                y_test_pred = (y_test_pred_proba > 0.5).astype(int)
-                            else:
-                                y_test_pred = model.predict(X_test_pca)
-                                y_test_pred_proba = model.predict_proba(X_test_pca)[:, 1]
-                            
-                            # Get test confusion matrix for this split
-                            test_cm = confusion_matrix(y_test, y_test_pred)
-                            test_cms.append(test_cm)
-                            
-                            print(f"Test confusion matrix for split {split_idx+1}:")
-                            print(test_cm)
-                            
-                            # Save the model, scaler, pca, and feature indices for this split
-                            split_model_data = {
-                                'model': model,
-                                'scaler': scaler,
-                                'pca': pca,
-                                'feature_indices': selected_indices,
-                                'feature_names': selected_features[:n_features],
-                                'val_cm': val_cm,
-                                'test_cm': test_cm
-                            }
-                            
-                            joblib.dump(split_model_data, f'{RESULTS_DIR}/{model_name}_model_data.joblib')
-                        
-                        # End of loop for splits
-                        
-                        # Skip this configuration if we didn't get results for all splits
-                        if len(val_cms) < len(SPLIT_SEEDS) or len(test_cms) < len(SPLIT_SEEDS):
-                            print(f"Skipping configuration due to incomplete splits: {model_type}, {granularity}, {oversampling_ratio}, {n_features}, {n_components}")
-                            # This is actually due to skipping oversampling ratio that is too low relative to current balance, which
-                            # is possible for a given split. But likely if one split fails, all will fail. So we'll just skip the entire
-                            # config with this oversampling ratio.
-                            continue
-                        
-                        # Combine confusion matrices across all splits
-                        combined_val_cm = np.sum(np.array(val_cms), axis=0)
-                        # combined_test_cm = np.sum(np.array(test_cms), axis=0)
-                        combined_test_cm = test_cms[0]
-                        
-                        print("\nCombined validation confusion matrix across all splits:")
-                        print(combined_val_cm)
-                        
-                        print("\nCombined test confusion matrix across all splits:")
-                        print(combined_test_cm)
-                        
-                        # Calculate metrics using the combined confusion matrices
-                        val_metrics = evaluate_from_combined_confusion_matrix(combined_val_cm, "Validation (Combined)")
-                        
-                        # Store this configuration's results
-                        result_row = {
-                            'granularity': granularity,
-                            'model_type': model_type,
-                            'oversampling_ratio': oversampling_ratio,
-                            'n_features': n_features,
-                            'n_components': n_components,
-                            'accuracy': val_metrics['accuracy'],
-                            'precision': val_metrics['precision'],
-                            'recall': val_metrics['recall'],
-                            'f1': val_metrics['f1'],
-                            'hss': val_metrics['hss'],
-                            'tss': val_metrics['tss'],
-                            'combined_val_cm': combined_val_cm,
-                            'combined_test_cm': combined_test_cm,
-                            'split_seeds': SPLIT_SEEDS,
-                            'selected_features': selected_features[:n_features],
-                            'explained_variance': explained_variance
-                        }
-                        
-                        all_results.append(result_row)
-                        
-                        # Save intermediate results (excluding numpy arrays)
-                        results_df = pd.DataFrame([{k: v for k, v in row.items() if not isinstance(v, np.ndarray)} 
-                                                 for row in all_results])
-                        results_df.to_csv(f'{RESULTS_DIR}/{NAME}_all_results_so_far.csv', index=False)
-    
-    # Convert results to DataFrame, excluding numpy arrays and lists
-    results_df = pd.DataFrame([{k: v for k, v in row.items() if not isinstance(v, np.ndarray)} 
-                             for row in all_results])
-    
-    # Save results
-    results_df.to_csv(f'{RESULTS_DIR}/{NAME}_all_results.csv', index=False)
-
-    if len(all_results) == 0:
-        print("No valid results found. Exiting.")
-        return
-        
-    # Get best configuration based on F1 score
-    best_idx = results_df['f1'].idxmax()
-    best_config = results_df.loc[best_idx].to_dict()
-    best_complete_config = all_results[best_idx]
-    
-    # Print best configuration
-    print("\nBest Configuration:")
-    print(f"Model type: {best_config['model_type']}")
-    print(f"Granularity: {best_config['granularity']}")
-    print(f"Oversampling Ratio: {best_config['oversampling_ratio']}")
-    print(f"Number of Features: {best_config['n_features']}")
-    print(f"Selected Features: {best_config['selected_features']}")
-    print(f"Number of PCA Components: {best_config['n_components']}")
-    print(f"F1 Score: {best_config['f1']:.4f}")
-    print(f"Accuracy: {best_config['accuracy']:.4f}")
-    print(f"Precision: {best_config['precision']:.4f}")
-    print(f"Recall: {best_config['recall']:.4f}")
-    print(f"HSS: {best_config['hss']:.4f}")
-    print(f"TSS: {best_config['tss']:.4f}")
-    
-    # Use the combined test confusion matrix to evaluate the best model
-    combined_test_cm = best_complete_config['combined_test_cm']
-    test_metrics = evaluate_from_combined_confusion_matrix(combined_test_cm, "Test (Combined)")
-    
-    def get_f_half(precision, recall):
-        return (1 + 0.5**2) * (precision * recall) / ((0.5**2 * precision) + recall)
-    
-    # Print all test metrics
-    print(f"Test Accuracy: {test_metrics['accuracy']:.4f}")
-    print(f"Test Precision: {test_metrics['precision']:.4f}")
-    print(f"Test Recall: {test_metrics['recall']:.4f}")
-    print(f"Test F1 Score: {test_metrics['f1']:.4f}")
-    print(f"Test F-0.5 Score: {get_f_half(test_metrics['precision'], test_metrics['recall']):.4f}")
-    print(f"Test HSS: {test_metrics['hss']:.4f}")
-    print(f"Test TSS: {test_metrics['tss']:.4f}")
-    print(f"Test Confusion Matrix:")
-    print(test_metrics['confusion_matrix'])
-    
-    # Get model names for the best configuration across all splits
-    best_model_names = []
-    for split_seed in SPLIT_SEEDS:
-        best_model_names.append(f"{NAME}_{best_config['granularity']}_{best_config['oversampling_ratio']}_{best_config['model_type']}_{best_config['n_features']}_{best_config['n_components']}_split{split_seed}")
-    
-    # Save the best configuration metadata
-    model_metadata = {
-        'model_type': best_config['model_type'],
-        'granularity': best_config['granularity'],
-        'oversampling_ratio': best_config['oversampling_ratio'],
-        'n_features': best_config['n_features'],
-        'n_components': best_config['n_components'],
-        'explained_variance': best_config['explained_variance'],
-        'validation_metrics': {
-            'accuracy': best_config['accuracy'],
-            'precision': best_config['precision'],
-            'recall': best_config['recall'],
-            'f1': best_config['f1'],
-            'hss': best_config['hss'],
-            'tss': best_config['tss'],
-            'confusion_matrix': best_complete_config['combined_val_cm'].tolist()
-        },
-        'test_metrics': {
-            'accuracy': test_metrics['accuracy'],
-            'precision': test_metrics['precision'],
-            'recall': test_metrics['recall'],
-            'f1': test_metrics['f1'],
-            'hss': test_metrics['hss'],
-            'tss': test_metrics['tss'],
-            'confusion_matrix': best_complete_config['combined_test_cm'].tolist()
-        },
-        'model_paths': best_model_names,
-        'split_seeds': SPLIT_SEEDS
+    # Store model data artifacts
+    model_data = {
+        'scaler': scaler,
+        'pca': pca,
+        'feature_indices': selected_indices,
+        'feature_names': selected_feature_names
     }
     
-    # Save metadata
-    joblib.dump(model_metadata, f'{RESULTS_DIR}/{NAME}_best_model_metadata.joblib')
+    return X_train_pca, y_train_resampled, X_test_pca, y_test, model_data
+
+def train_and_evaluate(X_train, y_train, X_test, y_test, model_type, data_type, model_data):
+    """
+    Train and evaluate a model
     
-    print(f"\nBest model configuration and metadata saved to {RESULTS_DIR}/ directory")
+    Args:
+        X_train: Training features
+        y_train: Training labels
+        X_test: Test features
+        y_test: Test labels
+        model_type: Type of model to train
+        data_type: Type of data (photospheric, coronal, or numeric)
+        model_data: Dictionary with model artifacts
+        
+    Returns:
+        model, test_metrics: Trained model and evaluation metrics
+    """
+    
+    # Create the model
+    model = ModelConstructor.create_model(
+        data_type, 
+        model_type, 
+        BEST_GRANULARITY, 
+        BEST_COMPONENT_COUNT, 
+        num_features=BEST_FEATURE_COUNT
+    )
+    
+    # Train the model
+    print(f'\nTraining {model_type} model...')
+    train_start = time.time()
+    model.fit(X_train, y_train)
+    train_end = time.time()
+    print(f'Model trained in {train_end - train_start:.2f} seconds')
+    
+    # Make predictions on test set
+    y_test_pred = model.predict(X_test)
+    y_test_pred_proba = model.predict_proba(X_test)[:, 1]
+    
+    # Evaluate the model
+    test_metrics = evaluate_model(y_test, y_test_pred, y_test_pred_proba, "Test")
+    
+    # Save the model and artifacts
+    model_data['model'] = model
+    model_data['test_metrics'] = test_metrics
+    
+    filename = f'{RESULTS_DIR}/{data_type}_{model_type}_model.joblib'
+    joblib.dump(model_data, filename)
+    print(f'Model saved to {filename}')
+    
+    return model, test_metrics
+
+def main():
+    """Main function to train and evaluate a model"""
+    
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Train and evaluate a SEP prediction model')
+    parser.add_argument('--data_type', required=True, choices=['photospheric', 'coronal', 'numeric'], 
+                        help='Type of data to use (photospheric, coronal, or numeric)')
+    parser.add_argument('--train_data', required=True, help='Path to training data CSV file')
+    parser.add_argument('--test_data', required=True, help='Path to test data CSV file')
+    parser.add_argument('--model_type', default=BEST_MODEL_TYPE, 
+                        help=f'Model type to use (default: {BEST_MODEL_TYPE})')
+    parser.add_argument('--granularity', default=BEST_GRANULARITY, 
+                        help=f'Data granularity (default: {BEST_GRANULARITY})')
+    parser.add_argument('--output_dir', default=RESULTS_DIR, 
+                        help=f'Output directory (default: {RESULTS_DIR})')
+    
+    args = parser.parse_args()
+    
+    # Update global variables
+    global RESULTS_DIR, BEST_MODEL_TYPE, BEST_GRANULARITY
+    RESULTS_DIR = args.output_dir
+    BEST_MODEL_TYPE = args.model_type
+    BEST_GRANULARITY = args.granularity
+    
+    os.makedirs(RESULTS_DIR, exist_ok=True)
+    
+    start_time = time.time()
+    print(f"Starting SEP model training and evaluation at {time.ctime()}")
+    
+    # Dynamically import the appropriate data loader module
+    if args.data_type == 'photospheric':
+        import PhotosphericDataLoader as data_loader_module
+    elif args.data_type == 'coronal':
+        import CoronalDataLoader as data_loader_module
+    elif args.data_type == 'numeric':
+        import NumericDataLoader as data_loader_module
+    else:
+        raise ValueError(f"Invalid data type: {args.data_type}")
+    
+    # Load datasets
+    print(f"Loading training data from {args.train_data}")
+    train_df = pd.read_csv(args.train_data)
+    
+    print(f"Loading test data from {args.test_data}")
+    test_df = pd.read_csv(args.test_data)
+    
+    print(f"Training data: {len(train_df)} rows")
+    print(f"Test data: {len(test_df)} rows")
+    
+    # Preprocess the data
+    print("Preprocessing data...")
+    
+    # Make sure 'Produced an SEP' column exists, create if not
+    if 'Produced an SEP' not in train_df.columns:
+        train_df['Produced an SEP'] = (train_df['Number of SEPs Produced'] > 0) * 1
+    if 'Produced an SEP' not in test_df.columns:
+        test_df['Produced an SEP'] = (test_df['Number of SEPs Produced'] > 0) * 1
+    
+    # Make sure 'Year' column exists, create if not
+    if 'Year' not in train_df.columns and 'Filename General' in train_df.columns:
+        train_df['Year'] = train_df['Filename General'].apply(lambda x: x.split('.')[3][0:4])
+    if 'Year' not in test_df.columns and 'Filename General' in test_df.columns:
+        test_df['Year'] = test_df['Filename General'].apply(lambda x: x.split('.')[3][0:4])
+    
+    # Make sure 'Is Plage' column is an integer
+    if 'Is Plage' in train_df.columns:
+        train_df['Is Plage'] = train_df['Is Plage'].astype(int)
+    if 'Is Plage' in test_df.columns:
+        test_df['Is Plage'] = test_df['Is Plage'].astype(int)
+    
+    # Make sure 'Most Probable AR Num' column exists, create if not
+    if 'Most Probable AR Num' not in train_df.columns and 'Relevant Active Regions' in train_df.columns:
+        train_df['Most Probable AR Num'] = train_df['Relevant Active Regions'].apply(lambda x: x.strip("[]'").split(',')[0])
+    if 'Most Probable AR Num' not in test_df.columns and 'Relevant Active Regions' in test_df.columns:
+        test_df['Most Probable AR Num'] = test_df['Relevant Active Regions'].apply(lambda x: x.strip("[]'").split(',')[0])
+    
+    # Prepare data
+    X_train, y_train, X_test, y_test, model_data = prepare_data(
+        train_df, test_df, BEST_GRANULARITY, data_loader_module, BEST_OVERSAMPLING_RATIO
+    )
+    
+    # Train and evaluate model
+    model, test_metrics = train_and_evaluate(X_train, y_train, X_test, y_test, BEST_MODEL_TYPE, args.data_type, model_data)
     
     # Calculate total runtime
     total_time = time.time() - start_time
-    print(f'\nAnalysis completed in {total_time:.2f} seconds ({total_time/60:.2f} minutes, {total_time/3600:.2f} hours)')
+    print(f'\nModel training and evaluation completed in {total_time:.2f} seconds ({total_time/60:.2f} minutes)')
+    
+    # Return the confusion matrix
+    return test_metrics['confusion_matrix']
 
 if __name__ == "__main__":
-    main()
+    conf_matrix = main()
+    print("Final confusion matrix:")
+    print(conf_matrix)
