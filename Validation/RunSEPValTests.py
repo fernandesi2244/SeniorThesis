@@ -63,25 +63,29 @@ for data_subset in data_subsets:
 
     # Remove rows where the datetime is within the range of any non_event or sep_event, saving the rows for later
     train_data = unified_data.copy()
-    test_data = unified_data.copy()
+    test_data = pd.DataFrame(columns=unified_data.columns)
+
+    print('Length of original data:', len(unified_data))
 
     for start_time, end_time in non_event_ranges:
         # SEP can start 2 days before the record as long as its end time is after the record
         # As a heuristic (with potential data leakage), remove all blobs where there is an
         # SEP whose start time is within 1 day of the blob record datetime.
 
+        filtered_out_train_data = train_data[((train_data['datetime_dt'] - pd.Timedelta(days=1) <= start_time) &
+                              (train_data['datetime_dt'] + pd.Timedelta(days=1) >= end_time))]
         train_data = train_data[~((train_data['datetime_dt'] - pd.Timedelta(days=1) <= start_time) &
-                                   (train_data['datetime_dt'] + pd.Timedelta(days=1) >= end_time))]
+                       (train_data['datetime_dt'] + pd.Timedelta(days=1) >= end_time))]
         
-        test_data = test_data[(test_data['datetime_dt'] - pd.Timedelta(days=1) <= start_time) &
-                              (test_data['datetime_dt'] + pd.Timedelta(days=1) >= end_time)]
+        test_data = pd.concat([test_data, filtered_out_train_data], ignore_index=True)
         
     for start_time, end_time in event_ranges:
+        filtered_out_train_data = train_data[((train_data['datetime_dt'] - pd.Timedelta(days=1) <= start_time) &
+                              (train_data['datetime_dt'] + pd.Timedelta(days=1) >= end_time))]
         train_data = train_data[~((train_data['datetime_dt'] - pd.Timedelta(days=1) <= start_time) &
-                                   (train_data['datetime_dt'] + pd.Timedelta(days=1) >= end_time))]
+                       (train_data['datetime_dt'] + pd.Timedelta(days=1) >= end_time))]
         
-        test_data = test_data[(test_data['datetime_dt'] - pd.Timedelta(days=1) <= start_time) &
-                              (test_data['datetime_dt'] + pd.Timedelta(days=1) >= end_time)]
+        test_data = pd.concat([test_data, filtered_out_train_data], ignore_index=True)
     
     print('Length of training data:', len(train_data))
     print('Length of test data:', len(test_data))
