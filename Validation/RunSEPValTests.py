@@ -26,8 +26,9 @@ for index, row in non_events.iterrows():
     forecast_start_time = row['Event Period Start Time for Continuous Forecast Models (24 hours prior to flare)']
     # Parse the date string into a datetime object (month/day/year hour:minute)
     forecast_start_time = pd.to_datetime(forecast_start_time, format='%m/%d/%Y %H:%M')
-    # Add 14 hours to the forecast start time
-    forecast_end_time = forecast_start_time + pd.Timedelta(hours=14)
+
+    forecast_end_time = row['Event Period End Time for Continuous Forecast Models (~14 hours after flare)']
+    forecast_end_time = pd.to_datetime(forecast_end_time, format='%m/%d/%Y %H:%M')
 
     non_event_ranges.append((forecast_start_time, forecast_end_time))
 
@@ -41,6 +42,14 @@ for index, row in sep_events.iterrows():
     forecast_end_time = pd.to_datetime(forecast_end_time, format='%m/%d/%Y %H:%M')
 
     event_ranges.append((forecast_start_time, forecast_end_time))  
+
+print("Non-event ranges:")
+for start_time, end_time in non_event_ranges:
+    print(f"Start: {start_time}, End: {end_time}")
+
+print("\nEvent ranges:")
+for start_time, end_time in event_ranges:
+    print(f"Start: {start_time}, End: {end_time}")
 
 #~~~~~~
 # For first set of tests, remove all non_events and sep_events from the training set and evaluate
@@ -73,6 +82,9 @@ for data_subset in data_subsets:
         
         test_data = test_data[(test_data['datetime_dt'] - pd.Timedelta(days=1) <= start_time) &
                               (test_data['datetime_dt'] + pd.Timedelta(days=1) >= end_time)]
+    
+    print('Length of training data:', len(train_data))
+    print('Length of test data:', len(test_data))
     
     # Call main function of TrainSEPValModel.py script in same dir
     confusion_matrix = TrainSEPValModel.main(data_subset, train_data, test_data, data_subset)
