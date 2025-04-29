@@ -402,6 +402,17 @@ def train_and_evaluate(X_train, y_train, X_test, y_test, model_type, data_type, 
     y_test_pred_proba = model.predict_proba(X_test)[:, 1]
     
     # Evaluate the model
+    test_metrics = evaluate_model(y_test, y_test_pred, y_test_pred_proba, "Test")
+    
+    # Save the model and artifacts
+    model_data['model'] = model
+    model_data['test_metrics'] = test_metrics
+    
+    filename = f'{RESULTS_DIR}/{data_type}_{model_type}_model.joblib'
+    joblib.dump(model_data, filename)
+    print(f'Model saved to {filename}')
+    
+    return model, test_metrics
 
 def main(data_type, train_df, test_df, output_dir=None):
     """
