@@ -15,17 +15,11 @@ import random
 from sklearn.utils import shuffle
 import sys
 import pathlib
-import argparse
 
 rootDir = pathlib.Path(__file__).resolve().parent.parent.absolute()
 sys.path.insert(1, os.path.join(rootDir, 'SEPPrediction'))
 
 from ModelConstructor import ModelConstructor
-
-# Import will be dynamically selected based on data_loader_type
-# from PhotosphericDataLoader import SEPInputDataGenerator
-# from CoronalDataLoader import SEPInputDataGenerator 
-# from NumericDataLoader import SEPInputDataGenerator
 
 # Create output directory for results
 RESULTS_DIR = f'results/sep_model_results'
@@ -36,12 +30,30 @@ SEED = 42
 random.seed(SEED)
 np.random.seed(SEED)
 
-# Best hyperparameters (as specified in the original code)
-BEST_MODEL_TYPE = 'random_forest_complex'
-BEST_GRANULARITY = 'per-disk-4hr'
-BEST_OVERSAMPLING_RATIO = 0.55
-BEST_FEATURE_COUNT = 90
-BEST_COMPONENT_COUNT = -1  # No PCA
+# Best hyperparameters by data type
+BEST_PARAMS = {
+    'photospheric': {
+        'MODEL_TYPE': 'random_forest_complex',
+        'GRANULARITY': 'per-disk-4hr',
+        'OVERSAMPLING_RATIO': 0.55,
+        'FEATURE_COUNT': 90,
+        'COMPONENT_COUNT': -1  # No PCA
+    },
+    'coronal': {
+        'MODEL_TYPE': 'random_forest_complex',
+        'GRANULARITY': 'per-disk-4hr',
+        'OVERSAMPLING_RATIO': 0.7,
+        'FEATURE_COUNT': 70,
+        'COMPONENT_COUNT': -1  # No PCA
+    },
+    'numeric': {
+        'MODEL_TYPE': 'random_forest_complex',
+        'GRANULARITY': 'per-disk-4hr',
+        'OVERSAMPLING_RATIO': 0.5,
+        'FEATURE_COUNT': 60,
+        'COMPONENT_COUNT': -1  # No PCA
+    }
+}
 
 # Multiprocessing setup
 cpus_to_use = max(int(multiprocessing.cpu_count() * 0.9), 1)
@@ -282,6 +294,11 @@ def prepare_data(train_df, test_df, granularity, data_loader_module, oversamplin
     print('Test set count:', len(X_test))
     print('Test set SEP count:', np.sum(y_test))
     
+    # Get data type from module name
+    data_type = data_loader_module.__name__.replace('DataLoader', '').lower()
+    feature_count = BEST_PARAMS[data_type]['FEATURE_COUNT']
+    component_count = BEST_PARAMS[data_type]['COMPONENT_COUNT']
+    
     # Over-sample minority class
     ros = RandomOverSampler(sampling_strategy=oversampling_ratio/2, random_state=SEED)
     X_train_resampled, y_train_resampled = ros.fit_resample(X_train, y_train)
@@ -305,7 +322,7 @@ def prepare_data(train_df, test_df, granularity, data_loader_module, oversamplin
     selected_features = [feature_names[i] for i in feature_indices]
     
     # Get the top n features
-    n_features = BEST_FEATURE_COUNT
+    n_features = feature_count
     if n_features > len(feature_indices):
         print(f"Warning: Requested {n_features} features, but only {len(feature_indices)} available. Using all available features.")
         n_features = len(feature_indices)
@@ -318,9 +335,9 @@ def prepare_data(train_df, test_df, granularity, data_loader_module, oversamplin
     X_test_selected = X_test[:, selected_indices]
     
     # Apply PCA if needed
-    if BEST_COMPONENT_COUNT != -1:
+    if component_count != -1:
         # Make sure n_components doesn't exceed the number of features or samples
-        n_components_actual = min(BEST_COMPONENT_COUNT, min(n_features, X_train_selected.shape[0]))
+        n_components_actual = min(component_count, min(n_features, X_train_selected.shape[0]))
         
         # Apply PCA
         pca = PCA(n_components=n_components_actual, random_state=SEED)
@@ -360,15 +377,17 @@ def train_and_evaluate(X_train, y_train, X_test, y_test, model_type, data_type, 
         
     Returns:
         model, test_metrics: Trained model and evaluation metrics
-    """
+    """    
+    # Get the best parameters for this data type
+    best_params = BEST_PARAMS[data_type]
     
     # Create the model
     model = ModelConstructor.create_model(
         data_type, 
         model_type, 
-        BEST_GRANULARITY, 
-        BEST_COMPONENT_COUNT, 
-        num_features=BEST_FEATURE_COUNT
+        best_params['GRANULARITY'], 
+        best_params['COMPONENT_COUNT'], 
+        num_features=best_params['FEATURE_COUNT']
     )
     
     # Train the model
@@ -383,63 +402,43 @@ def train_and_evaluate(X_train, y_train, X_test, y_test, model_type, data_type, 
     y_test_pred_proba = model.predict_proba(X_test)[:, 1]
     
     # Evaluate the model
-    test_metrics = evaluate_model(y_test, y_test_pred, y_test_pred_proba, "Test")
-    
-    # Save the model and artifacts
-    model_data['model'] = model
-    model_data['test_metrics'] = test_metrics
-    
-    filename = f'{RESULTS_DIR}/{data_type}_{model_type}_model.joblib'
-    joblib.dump(model_data, filename)
-    print(f'Model saved to {filename}')
-    
-    return model, test_metrics
 
-def main():
-    """Main function to train and evaluate a model"""
+def main(data_type, train_df, test_df, output_dir=None):
+    """
+    Main function to train and evaluate a model
     
-    # Parse command line arguments
-    parser = argparse.ArgumentParser(description='Train and evaluate a SEP prediction model')
-    parser.add_argument('--data_type', required=True, choices=['photospheric', 'coronal', 'numeric'], 
-                        help='Type of data to use (photospheric, coronal, or numeric)')
-    parser.add_argument('--train_data', required=True, help='Path to training data CSV file')
-    parser.add_argument('--test_data', required=True, help='Path to test data CSV file')
-    parser.add_argument('--model_type', default=BEST_MODEL_TYPE, 
-                        help=f'Model type to use (default: {BEST_MODEL_TYPE})')
-    parser.add_argument('--granularity', default=BEST_GRANULARITY, 
-                        help=f'Data granularity (default: {BEST_GRANULARITY})')
-    parser.add_argument('--output_dir', default=RESULTS_DIR, 
-                        help=f'Output directory (default: {RESULTS_DIR})')
-    
-    args = parser.parse_args()
-    
-    # Update global variables
-    global RESULTS_DIR, BEST_MODEL_TYPE, BEST_GRANULARITY
-    RESULTS_DIR = args.output_dir
-    BEST_MODEL_TYPE = args.model_type
-    BEST_GRANULARITY = args.granularity
-    
-    os.makedirs(RESULTS_DIR, exist_ok=True)
+    Args:
+        data_type: Type of data ('photospheric', 'coronal', or 'numeric')
+        train_df: Training DataFrame
+        test_df: Test DataFrame
+        output_dir: Directory to save results (optional)
+        
+    Returns:
+        confusion_matrix: The confusion matrix from model evaluation
+    """
+    # Update output directory if provided
+    global RESULTS_DIR
+    if output_dir:
+        RESULTS_DIR = output_dir
+        os.makedirs(RESULTS_DIR, exist_ok=True)
     
     start_time = time.time()
     print(f"Starting SEP model training and evaluation at {time.ctime()}")
     
+    # Check data_type is valid
+    if data_type not in ['photospheric', 'coronal', 'numeric']:
+        raise ValueError(f"Invalid data type: {data_type}. Must be one of 'photospheric', 'coronal', or 'numeric'")
+    
+    # Get the best parameters for this data type
+    best_params = BEST_PARAMS[data_type]
+    
     # Dynamically import the appropriate data loader module
-    if args.data_type == 'photospheric':
+    if data_type == 'photospheric':
         import PhotosphericDataLoader as data_loader_module
-    elif args.data_type == 'coronal':
+    elif data_type == 'coronal':
         import CoronalDataLoader as data_loader_module
-    elif args.data_type == 'numeric':
+    elif data_type == 'numeric':
         import NumericDataLoader as data_loader_module
-    else:
-        raise ValueError(f"Invalid data type: {args.data_type}")
-    
-    # Load datasets
-    print(f"Loading training data from {args.train_data}")
-    train_df = pd.read_csv(args.train_data)
-    
-    print(f"Loading test data from {args.test_data}")
-    test_df = pd.read_csv(args.test_data)
     
     print(f"Training data: {len(train_df)} rows")
     print(f"Test data: {len(test_df)} rows")
@@ -473,11 +472,19 @@ def main():
     
     # Prepare data
     X_train, y_train, X_test, y_test, model_data = prepare_data(
-        train_df, test_df, BEST_GRANULARITY, data_loader_module, BEST_OVERSAMPLING_RATIO
+        train_df, test_df, 
+        best_params['GRANULARITY'], 
+        data_loader_module, 
+        best_params['OVERSAMPLING_RATIO']
     )
     
     # Train and evaluate model
-    model, test_metrics = train_and_evaluate(X_train, y_train, X_test, y_test, BEST_MODEL_TYPE, args.data_type, model_data)
+    model, test_metrics = train_and_evaluate(
+        X_train, y_train, X_test, y_test, 
+        best_params['MODEL_TYPE'], 
+        data_type, 
+        model_data
+    )
     
     # Calculate total runtime
     total_time = time.time() - start_time

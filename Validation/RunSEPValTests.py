@@ -10,6 +10,8 @@ import sys
 import pandas as pd
 import numpy as np
 
+import TrainSEPValModel
+
 data_subsets = ['photospheric', 'coronal', 'combination']
 
 # Open the CSV files containing the positive and negative events
@@ -72,9 +74,11 @@ for data_subset in data_subsets:
         test_data = test_data[(test_data['datetime_dt'] - pd.Timedelta(days=1) <= start_time) &
                               (test_data['datetime_dt'] + pd.Timedelta(days=1) >= end_time)]
     
-
+    # Call main function of TrainSEPValModel.py script in same dir
+    confusion_matrix = TrainSEPValModel.main(data_subset, train_data, test_data, data_subset)
     
-
-        
-        
+    # Just print the confusion matrix for now
+    print(f"Confusion Matrix for {data_subset} data subset:")
+    print(confusion_matrix)
+    print("\n")
         
