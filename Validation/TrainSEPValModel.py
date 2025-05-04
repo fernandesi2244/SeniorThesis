@@ -15,6 +15,9 @@ import random
 from sklearn.utils import shuffle
 import sys
 import pathlib
+import json
+from datetime import timedelta
+import datetime
 
 rootDir = pathlib.Path(__file__).resolve().parent.parent.absolute()
 sys.path.insert(1, os.path.join(rootDir, 'SEPPrediction'))
@@ -121,20 +124,26 @@ def extract_all_data(generator):
     Returns:
         X: Features array
         y: Labels array
+        dts: Datetimes array
     """
     all_X = []
     all_y = []
+    dts = []
     for i in range(len(generator)):
         if i % 100 == 0:
             print(f'Extracting batch {i+1} of {len(generator)}...')
         X_batch, y_batch = generator[i]
+        # Extract the datetime from the last element of X_batch
+        dt_batch = X_batch[:, -1]  # Assuming the last column contains the timestamps
+        X_batch = X_batch[:, :-1]  # Remove the last column from X_batch
         all_X.append(X_batch)
         all_y.append(y_batch)
+        dts.append(dt_batch)
     
     if len(all_X) > 0:
-        return np.vstack(all_X), np.concatenate(all_y)
+        return np.vstack(all_X), np.concatenate(all_y), np.concatenate(dts)
     else:
-        return np.array([]), np.array([])
+        return np.array([]), np.array([]), np.array([])
 
 def evaluate_model(y_true, y_pred, y_pred_proba, set_name=""):
     """
@@ -270,8 +279,8 @@ def prepare_data(train_df, test_df, granularity, data_loader_module, oversamplin
     
     # Extract all data from generators
     print('\nExtracting data from generators...')
-    X_train, y_train = extract_all_data(train_generator)
-    X_test, y_test = extract_all_data(test_generator)
+    X_train, y_train, _ = extract_all_data(train_generator)
+    X_test, y_test, dts_test = extract_all_data(test_generator)
     
     # Check for NaN and Inf values
     print('\nChecking for NaN and Inf values:')
@@ -360,7 +369,7 @@ def prepare_data(train_df, test_df, granularity, data_loader_module, oversamplin
         'feature_names': selected_feature_names
     }
     
-    return X_train_pca, y_train_resampled, X_test_pca, y_test, model_data
+    return X_train_pca, y_train_resampled, X_test_pca, y_test, model_data, dts_test
 
 def train_and_evaluate(X_train, y_train, X_test, y_test, model_type, data_type, model_data):
     """
@@ -481,13 +490,36 @@ def main(data_type, train_df, test_df, output_dir=None):
     if 'Most Probable AR Num' not in test_df.columns and 'Relevant Active Regions' in test_df.columns:
         test_df['Most Probable AR Num'] = test_df['Relevant Active Regions'].apply(lambda x: x.strip("[]'").split(',')[0])
     
-    # Prepare data
-    X_train, y_train, X_test, y_test, model_data = prepare_data(
-        train_df, test_df, 
-        best_params['GRANULARITY'], 
-        data_loader_module, 
-        best_params['OVERSAMPLING_RATIO']
-    )
+    # File paths for saving/loading data
+    data_file = f"{RESULTS_DIR}/{data_type}_prepared_data.npz"
+    
+    if os.path.exists(data_file):
+        print(f"Loading prepared data from {data_file}...")
+        data = np.load(data_file, allow_pickle=True)
+        X_train = data['X_train']
+        y_train = data['y_train']
+        X_test = data['X_test']
+        y_test = data['y_test']
+        model_data = data['model_data'].item()
+        dts_test = data['dts_test']
+    else:
+        print("Preparing data...")
+        X_train, y_train, X_test, y_test, model_data, dts_test = prepare_data(
+            train_df, test_df, 
+            best_params['GRANULARITY'], 
+            data_loader_module, 
+            best_params['OVERSAMPLING_RATIO']
+        )
+        print(f"Saving prepared data to {data_file}...")
+        np.savez_compressed(
+            data_file, 
+            X_train=X_train, 
+            y_train=y_train, 
+            X_test=X_test, 
+            y_test=y_test, 
+            model_data=model_data, 
+            dts_test=dts_test
+        )
     
     # Train and evaluate model
     model, test_metrics = train_and_evaluate(
@@ -496,6 +528,16 @@ def main(data_type, train_df, test_df, output_dir=None):
         data_type, 
         model_data
     )
+
+    # Now go through each of the test data and generate a JSON prediction file for each
+    for i in range(len(test_df)):
+        dt_str = dts_test[i] # Already in the correct format of '%Y%m%d_%H%M%S_TAI'
+        dt = pd.to_datetime(dt_str, format='%Y%m%d_%H%M%S_TAI')
+
+        prediction = model.predict(X_test[i].reshape(1, -1))[0]
+        prediction_proba = model.predict_proba(X_test[i].reshape(1, -1))[0][1]
+
+        createSepJson4ccmc(dt, prediction_proba, prediction)
     
     # Calculate total runtime
     total_time = time.time() - start_time
@@ -503,6 +545,88 @@ def main(data_type, train_df, test_df, output_dir=None):
     
     # Return the confusion matrix
     return test_metrics['confusion_matrix']
+
+def createSepJson4ccmc(input_dt, DiskProb, prediction, issueTime=None):
+    """
+    Create SPE JSON file for CCMC
+    """
+    year = input_dt.year
+    month = input_dt.month
+    day = input_dt.day
+    hour = input_dt.hour
+    minute = input_dt.minute
+
+    dt_str = datetime.datetime.strftime(input_dt, '%Y-%m-%dT%H:%M:%S')
+
+    # SPEprobValue = 1.00-float(DiskProb[4])/100.00 # SPE probabilty value
+    SPEprobValue = DiskProb # No post-processing of the probability value like in empirical MagPy
+
+    forecastEndTime = input_dt + timedelta(days=1)
+    forecastEndTimeStr = datetime.datetime.strftime(forecastEndTime, '%Y-%m-%dT%H:%M:%S')
+    if issueTime is None:
+        issueTime = datetime.datetime.now(datetime.timezone.utc)
+    issueTimeStr = datetime.datetime.strftime(issueTime, '%Y-%m-%dT%H:%M:%S')
+    
+    res={
+        "sep_forecast_submission": {
+            "model":{
+                "short_name": "MagPy_ML_SHARP_HMI_CEA",
+                "spase_id": "spase://CCMC/SimulationModel/MagPy-ML/v1"
+            },
+            "mode": "forecast", # not really a forecast though since not predictions not causal (based on future data too, though most likely unrelated)
+            "issue_time":f"{issueTimeStr}Z",
+            "inputs":[
+                {
+                    "magnetogram":{
+                        "observatory":"SDO",
+                        "instrument":"HMI",
+                        "products":[
+                            {
+                                "product":"hmi.sharp_cea_720s_nrt",
+                                "last_data_time":f'{year}-{month}-{day}T{hour}:{minute}Z',
+                            }
+                        ]
+                    }
+                }
+            ],
+            "forecasts":[
+                {
+                    "energy_channel": {
+                        "min": 10,
+                        "max": -1,
+                        "units": "MeV"
+                    },
+                    "species": "proton",
+                    "location": "earth",
+                    "prediction_window":{
+                        "start_time":f"{dt_str}Z",
+                        "end_time":f"{forecastEndTimeStr}Z",
+                    },
+                    "probabilities":[
+                        {
+                            "probability_value":f"{SPEprobValue:.5f}",
+                            "threshold":10,
+                            "threshold_units":"pfu"
+                        }
+                    ],
+                    "all_clear":{
+                        "all_clear_boolean": not prediction,
+                        "threshold":10,
+                        "threshold_units":"pfu",
+                        "probability_threshold":0.5
+                    }
+                }
+            ]
+        }
+    }
+    
+    prediction_json_dir = os.path.join('JSON CCMC','SEP JSON')
+    if not os.path.exists(prediction_json_dir):
+        os.makedirs(prediction_json_dir)
+    
+    MagPyJSONCCMC = f'MagPy-ML-HMI-SHARP-Vector.{year}{month}{day}T{hour}{minute}.{issueTime.year}{issueTime.month:02d}{issueTime.day:02d}T{issueTime.hour:02d}{issueTime.minute:02d}.json'
+    with open(os.path.join(prediction_json_dir, MagPyJSONCCMC), 'w',encoding='utf8') as JSONFile:
+        json.dump(res, JSONFile, indent=2, separators=(',', ': '))
 
 if __name__ == "__main__":
     conf_matrix = main()

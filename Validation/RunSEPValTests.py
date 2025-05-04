@@ -12,7 +12,7 @@ import numpy as np
 
 import TrainSEPValModel
 
-data_subsets = ['photospheric', 'coronal', 'combination']
+data_subsets = ['photospheric', 'coronal', 'numeric']
 
 # Open the CSV files containing the positive and negative events
 non_events = pd.read_csv('../InputData/SEPValidationChallengePhaseIII_NonEvents_v4.csv')
@@ -43,13 +43,13 @@ for index, row in sep_events.iterrows():
 
     event_ranges.append((forecast_start_time, forecast_end_time))  
 
-print("Non-event ranges:")
-for start_time, end_time in non_event_ranges:
-    print(f"Start: {start_time}, End: {end_time}")
+# print("Non-event ranges:")
+# for start_time, end_time in non_event_ranges:
+#     print(f"Start: {start_time}, End: {end_time}")
 
-print("\nEvent ranges:")
-for start_time, end_time in event_ranges:
-    print(f"Start: {start_time}, End: {end_time}")
+# print("\nEvent ranges:")
+# for start_time, end_time in event_ranges:
+#     print(f"Start: {start_time}, End: {end_time}")
 
 #~~~~~~
 # For first set of tests, remove all non_events and sep_events from the training set and evaluate
