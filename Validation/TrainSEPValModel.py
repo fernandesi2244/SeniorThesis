@@ -281,6 +281,12 @@ def prepare_data(train_df, test_df, granularity, data_loader_module, oversamplin
     print('\nExtracting data from generators...')
     X_train, y_train, _ = extract_all_data(train_generator)
     X_test, y_test, dts_test = extract_all_data(test_generator)
+
+    print('X_train type:', type(X_train), 'X_train shape:', X_train.shape)
+    print('y_train type:', type(y_train), 'y_train shape:', y_train.shape)
+
+    print('X_train first 5 rows:', X_train[:5])
+    print('y_train first 5 rows:', y_train[:5])
     
     # Check for NaN and Inf values
     print('\nChecking for NaN and Inf values:')

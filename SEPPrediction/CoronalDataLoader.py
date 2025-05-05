@@ -136,6 +136,12 @@ class SEPInputDataGenerator(tf.keras.utils.Sequence):
                 # overall_data_vector.extend(prev_blob_vectors)
                 overall_data_vector.extend(blob_timeseries_vector)
 
+                # Add on dt for validation (WARNING: will break previous code if other changes not made)
+                # use format '%Y%m%d_%H%M%S_TAI' for datetime
+                dt = row['datetime']
+                dt_str = dt.strftime('%Y%m%d_%H%M%S_TAI')
+                overall_data_vector.append(dt_str)
+
                 # overall_data_vector = np.array(overall_data_vector)
                 overall_data_vector = np.array(overall_data_vector)
 
@@ -255,6 +261,12 @@ class SEPInputDataGenerator(tf.keras.utils.Sequence):
                     overall_blob_data.extend(np.zeros(SEPInputDataGenerator.TIMESERIES_STEPS * len(SEPInputDataGenerator.BLOB_VECTOR_COLUMNS_GENERAL))) # add blob at a time
                 
                 complete_data_vector = full_disk_one_time_info + overall_blob_data
+
+                # Add on dt for validation (WARNING: will break previous code if other changes not made)
+                # use format '%Y%m%d_%H%M%S_TAI' for datetime
+                dt_str = dt.strftime('%Y%m%d_%H%M%S_TAI')
+                complete_data_vector.append(dt_str)
+
                 complete_data_vector = np.array(complete_data_vector)
 
                 x_data.append(complete_data_vector)
