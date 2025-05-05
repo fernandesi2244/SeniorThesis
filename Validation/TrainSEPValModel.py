@@ -537,7 +537,7 @@ def main(data_type, train_df, test_df, output_dir=None):
     )
 
     # Now go through each of the test data and generate a JSON prediction file for each
-    for i in range(len(test_df)):
+    for i in range(len(X_test)):
         dt_str = dts_test[i] # Already in the correct format of '%Y%m%d_%H%M%S_TAI'
         dt = pd.to_datetime(dt_str, format='%Y%m%d_%H%M%S_TAI')
 
