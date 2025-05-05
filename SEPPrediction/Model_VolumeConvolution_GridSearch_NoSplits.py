@@ -2,6 +2,7 @@ from VolumeSlicesAndCubeDataLoader import PrimarySEPInputDataGenerator
 from VolumeSlicesAndCubeDataLoader import SecondarySEPInputDataGenerator as SC_SecondarySEPInputDataGenerator
 from VolumeCubeDataLoader import SecondarySEPInputDataGenerator as C_SecondarySEPInputDataGenerator
 from VolumeSlicesDataLoader import SecondarySEPInputDataGenerator as S_SecondarySEPInputDataGenerator
+from VolumeFullCubeDataLoader import SecondarySEPInputDataGenerator as FC_SecondarySEPInputDataGenerator
 
 from ModelConstructor import ModelConstructor
 import pandas as pd
@@ -166,28 +167,28 @@ def load_data(granularity):
     blob_df_filename = '../OutputData/UnifiedActiveRegionData_with_updated_SEP_list_but_no_line_count.csv'
     blob_df = pd.read_csv(blob_df_filename)
 
-    # Go through all the data and make sure slices and cubes exist for all of them. if they don't, exclude
-    # them from the dataset. This is because we can't train on them if they don't exist.
-    rows_to_drop = []
-    for i, row in blob_df.iterrows():
-        filename_general = row['Filename General']
-        blob_index = row['Blob Index']
+    # # Go through all the data and make sure slices and cubes exist for all of them. if they don't, exclude
+    # # them from the dataset. This is because we can't train on them if they don't exist.
+    # rows_to_drop = []
+    # for i, row in blob_df.iterrows():
+    #     filename_general = row['Filename General']
+    #     blob_index = row['Blob Index']
 
-        xy_slices_path = os.path.join(GENERATED_VOLUME_SLICES_AND_CUBE_PATH, f'{filename_general}_blob{blob_index}_planes_xy.npy')
-        xz_slices_path = os.path.join(GENERATED_VOLUME_SLICES_AND_CUBE_PATH, f'{filename_general}_blob{blob_index}_planes_xz.npy')
-        yz_slices_path = os.path.join(GENERATED_VOLUME_SLICES_AND_CUBE_PATH, f'{filename_general}_blob{blob_index}_planes_yz.npy')
-        cube_path = os.path.join(GENERATED_VOLUME_SLICES_AND_CUBE_PATH, f'{filename_general}_blob{blob_index}_cube.npy')
+    #     xy_slices_path = os.path.join(GENERATED_VOLUME_SLICES_AND_CUBE_PATH, f'{filename_general}_blob{blob_index}_planes_xy.npy')
+    #     xz_slices_path = os.path.join(GENERATED_VOLUME_SLICES_AND_CUBE_PATH, f'{filename_general}_blob{blob_index}_planes_xz.npy')
+    #     yz_slices_path = os.path.join(GENERATED_VOLUME_SLICES_AND_CUBE_PATH, f'{filename_general}_blob{blob_index}_planes_yz.npy')
+    #     cube_path = os.path.join(GENERATED_VOLUME_SLICES_AND_CUBE_PATH, f'{filename_general}_blob{blob_index}_cube.npy')
 
-        if not os.path.exists(xy_slices_path) or not os.path.exists(xz_slices_path) or not os.path.exists(yz_slices_path) or not os.path.exists(cube_path):
-            print(f'Warning: Missing slices or cube for {filename_general} blob {blob_index}. Dropping from dataset.')
-            rows_to_drop.append(i)
+    #     if not os.path.exists(xy_slices_path) or not os.path.exists(xz_slices_path) or not os.path.exists(yz_slices_path) or not os.path.exists(cube_path):
+    #         print(f'Warning: Missing slices or cube for {filename_general} blob {blob_index}. Dropping from dataset.')
+    #         rows_to_drop.append(i)
     
-    if len(rows_to_drop) > 0:
-        blob_df.drop(rows_to_drop, inplace=True)
+    # if len(rows_to_drop) > 0:
+    #     blob_df.drop(rows_to_drop, inplace=True)
 
-    blob_df.reset_index(drop=True, inplace=True)
+    # blob_df.reset_index(drop=True, inplace=True)
 
-    print('Dropped', len(rows_to_drop), 'rows due to missing slices or cube.')
+    # print('Dropped', len(rows_to_drop), 'rows due to missing slices or cube.')
 
     print(f"Loaded dataset with {len(blob_df)} rows")
 
@@ -286,14 +287,15 @@ def main():
     # granularities = ['per-blob', 'per-disk-4hr', 'per-disk-1d']
     granularities = ['per-disk-1d', 'per-disk-4hr'] # per-blob not coded in ModelConstructor yet
 
-    oversampling_ratios = [-1, 0.1, 0.25, 0.5, 0.65, 0.75, 1] # pos:neg ratio.
+    oversampling_ratios = [0.75] # pos:neg ratio.
 
     model_types = [
         # 'conv_nn_on_slices_and_cube',
-        'conv_nn_on_cube',
-        'conv_nn_on_cube_simple',
-        'conv_nn_on_cube_complex',
+        # 'conv_nn_on_cube',
+        # 'conv_nn_on_cube_simple',
+        # 'conv_nn_on_cube_complex',
         # 'conv_nn_on_slices',
+        'conv_nn_on_volume'
     ]
     
     # Create a list to store all results
@@ -316,6 +318,8 @@ def main():
                 dataloader_type = 'cube'
             elif model_type == 'conv_nn_on_slices':
                 dataloader_type = 'slices'
+            elif model_type == 'conv_nn_on_volume':
+                dataloader_type = 'volume'
             else:
                 raise ValueError(f"Invalid model type: {model_type}")
             
@@ -416,6 +420,10 @@ def main():
                     train_generator = S_SecondarySEPInputDataGenerator(train_arr, batch_size=32, shuffle=False, granularity=granularity, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
                     val_generator = S_SecondarySEPInputDataGenerator(val_arr, batch_size=32, shuffle=False, granularity=granularity, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
                     test_generator = S_SecondarySEPInputDataGenerator(test_arr, batch_size=32, shuffle=False, granularity=granularity, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
+                elif model_type == 'conv_nn_on_volume':
+                    train_generator = FC_SecondarySEPInputDataGenerator(train_arr, batch_size=32, shuffle=False, granularity=granularity, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
+                    val_generator = FC_SecondarySEPInputDataGenerator(val_arr, batch_size=32, shuffle=False, granularity=granularity, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
+                    test_generator = FC_SecondarySEPInputDataGenerator(test_arr, batch_size=32, shuffle=False, granularity=granularity, use_multiprocessing=True, workers=cpus_to_use, max_queue_size=cpus_to_use * 2)
                 else:
                     raise ValueError(f"Invalid model type: {model_type}")
 

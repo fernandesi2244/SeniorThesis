@@ -17,6 +17,7 @@ import NumericDataLoader
 import VolumeSlicesAndCubeDataLoader
 import VolumeCubeDataLoader
 import VolumeSlicesDataLoader
+import VolumeFullCubeDataLoader
 
 class ModelConstructor(object):
     RANDOM_STATE = 42
@@ -55,6 +56,7 @@ class ModelConstructor(object):
         'conv_nn_on_cube_simple',
         'conv_nn_on_cube_complex',
         'conv_nn_on_slices',
+        'conv_nn_on_volume',
         """
 
         if dataloader_type == 'photospheric':
@@ -73,6 +75,8 @@ class ModelConstructor(object):
         #     dataloader = RecentEventsDataLoader.SecondarySEPInputDataGenerator
         elif dataloader_type == 'slices':
             dataloader = VolumeSlicesDataLoader.SecondarySEPInputDataGenerator
+        elif dataloader_type == 'volume':
+            dataloader = VolumeFullCubeDataLoader.SecondarySEPInputDataGenerator
         else:
             raise ValueError('Invalid dataloader type')
 
@@ -105,6 +109,7 @@ class ModelConstructor(object):
             'conv_nn_on_cube_simple_recent_events': lambda: ModelConstructor.get_conv_nn_recent_events(dataloader, granularity, 'cube_simple'),
             'conv_nn_on_cube_complex': lambda: ModelConstructor.get_conv_nn(dataloader, granularity, 'cube_complex'),
             'conv_nn_on_slices': lambda: ModelConstructor.get_conv_nn(dataloader, granularity, 'slices'),
+            'conv_nn_on_volume': lambda: ModelConstructor.get_conv_nn_just_volume(dataloader, granularity, 'volume_simple'),
         }
         
         # Get the model function or raise an error if model_type is invalid
@@ -1684,6 +1689,137 @@ class ModelConstructor(object):
             model = tf.keras.models.Model(inputs=flattened_input, outputs=outputs)
             
             # Compile model
+            model.compile(
+                optimizer='adam',
+                loss='binary_crossentropy',
+                metrics=['accuracy', tf.keras.metrics.AUC()]
+            )
+            
+            model.summary()
+            
+            return model
+    
+    def get_conv_nn_just_volume(dataloader, granularity, version):
+        # NOTE: Function not completely implemented, used as a quick robustness check.
+        # Please refer to get_conv_nn for full functionality.
+        if granularity == 'per-blob':
+            raise ValueError('Convolutional models are not yet supported for per-blob granularity')
+        
+        # NOTE: From now on, assuming per-disk. Moreover, both options (1d vs 4hr) are treated equally
+        class StackLayer(tf.keras.layers.Layer):
+            def __init__(self, axis=1, **kwargs):
+                super(StackLayer, self).__init__(**kwargs)
+                self.axis = axis
+                
+            def call(self, inputs):
+                return tf.stack(inputs, axis=self.axis)
+        
+        if version == 'volume_simple':
+            """
+            Input format per batch example (all as flattened scalar values immediately following each other)
+            - BLOB_ONE_TIME_INFO
+            x TOP_N_BLOBS
+                -- BLOB_VECTOR_COLUMNS_GENERAL
+                -- 200x400x100x3 (200x400x100 cube with 3 channels)
+            """
+            nx, ny, nz, channels = 200, 400, 100, 3
+
+            # Calculate the new input size
+            complete_input_size = len(dataloader.BLOB_ONE_TIME_INFO) + dataloader.TOP_N_BLOBS * (
+                len(dataloader.BLOB_VECTOR_COLUMNS_GENERAL) + nx * ny * nz * channels)
+            
+            flattened_input = tf.keras.layers.Input(shape=(complete_input_size,))
+
+            # Split the input into the two main parts
+            blob_data_input = tf.keras.layers.Lambda(lambda x: x[:, len(dataloader.BLOB_ONE_TIME_INFO):])(flattened_input)
+
+            # Create shared layers for all blobs
+            # Shared layer for blob general info (keep the same)
+            general_dense = tf.keras.layers.Dense(1, activation='relu')
+            
+            # Modified shared layers for the larger cube
+            # Use larger strides to reduce spatial dimensions significantly
+            # First conv layer with large strides to drastically reduce dimensions
+            cube_conv_layer1 = tf.keras.layers.Conv3D(
+                filters=2,  # Keep filter count low
+                kernel_size=(5, 5, 5),
+                strides=(20, 40, 10),  # Large strides to reduce dimensions: 200/20=10, 400/40=10, 100/10=10
+                activation='relu',
+                padding='same'
+            )
+            
+            # Second conv layer to further process
+            cube_conv_layer2 = tf.keras.layers.Conv3D(
+                filters=2,
+                kernel_size=(3, 3, 3),
+                strides=(2, 2, 2),  # Further reduce: 10/2=5, 10/2=5, 10/2=5
+                activation='relu',
+                padding='same'
+            )
+            
+            # Global pooling instead of flattening to reduce parameters
+            cube_global_pool = tf.keras.layers.GlobalAveragePooling3D()
+            
+            # Keep the final dense layer simple
+            cube_dense = tf.keras.layers.Dense(2, activation='relu')
+            
+            # Process each blob with shared layers
+            blob_data_output = []
+            len_general_info = len(dataloader.BLOB_VECTOR_COLUMNS_GENERAL)
+            len_cube_data = nx * ny * nz * channels
+            len_each_blob = len_general_info + len_cube_data
+            
+            for i in range(dataloader.TOP_N_BLOBS):
+                # Extract the general info for this blob
+                start_general_index = i * len_general_info
+                end_general_index = start_general_index + len_general_info
+                general_info = tf.keras.layers.Lambda(
+                    lambda x: x[:, start_general_index:end_general_index])(blob_data_input)
+                
+                # Extract cube data - adjust index calculation for the much larger cube
+                start_cube_index = dataloader.TOP_N_BLOBS * len_general_info + i * len_cube_data
+                end_cube_index = start_cube_index + len_cube_data
+                cube = tf.keras.layers.Lambda(
+                    lambda x: x[:, start_cube_index:end_cube_index])(blob_data_input)
+                
+                # Process general info (keep the same)
+                general_output = general_dense(general_info)
+                
+                # Process cube with our new architecture
+                cube = tf.keras.layers.Reshape((nx, ny, nz, channels))(cube)
+                
+                # Apply convolutions with large strides to drastically reduce dimensions
+                cube_output = cube_conv_layer1(cube)
+                cube_output = cube_conv_layer2(cube_output)
+                
+                # Global pooling instead of flattening to keep parameter count low
+                cube_output = cube_global_pool(cube_output)
+                
+                # Final dense layer (keep the same)
+                cube_output = cube_dense(cube_output)
+                
+                # Concatenate outputs for this blob
+                combined_output = tf.keras.layers.Concatenate()([general_output, cube_output])
+                
+                # Add the output to the list
+                blob_data_output.append(combined_output)
+            
+            # Aggregate the outputs for each blob by taking the maximum value
+            blob_data_output = tf.keras.layers.Maximum()(blob_data_output)
+            
+            # Use the blob data output directly as combined output
+            combined_output = blob_data_output
+            
+            # Final processing (keep the same)
+            combined_output = tf.keras.layers.Dense(2, activation='relu')(combined_output)
+            
+            # Output layer (keep the same)
+            outputs = tf.keras.layers.Dense(1, activation='sigmoid')(combined_output)
+            
+            # Create model
+            model = tf.keras.models.Model(inputs=flattened_input, outputs=outputs)
+            
+            # Compile model (keep the same)
             model.compile(
                 optimizer='adam',
                 loss='binary_crossentropy',
