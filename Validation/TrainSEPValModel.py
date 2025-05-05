@@ -135,7 +135,8 @@ def extract_all_data(generator):
         X_batch, y_batch = generator[i]
         # Extract the datetime from the last element of X_batch
         dt_batch = X_batch[:, -1]  # Assuming the last column contains the timestamps
-        X_batch = X_batch[:, :-1]  # Remove the last column from X_batch
+        # convert to float
+        X_batch = X_batch[:, :-1].astype(np.float32) # Remove the last column from X_batch
         all_X.append(X_batch)
         all_y.append(y_batch)
         dts.append(dt_batch)
