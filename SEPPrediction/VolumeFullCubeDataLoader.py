@@ -232,15 +232,14 @@ class SecondarySEPInputDataGenerator(tf.keras.utils.Sequence):
                 cube[:, :, :, 1] = by_3D_blob
                 cube[:, :, :, 2] = bz_3D_blob
 
-                # The cube contains a 5x5x5 cube.
                 # Flatten each one and add to the overall data vector.
                 volume_data.extend(cube.flatten())
 
             nx, ny, nz, channels = 200, 400, 100, 3
             
             # If there were less than 5 blobs, fill in the rest with 0s
-            while len(volume_data) < PrimarySEPInputDataGenerator.TOP_N_BLOBS*(5*5*5*channels):
-                volume_data.extend(np.zeros(5*5*5*channels))
+            while len(volume_data) < PrimarySEPInputDataGenerator.TOP_N_BLOBS*(nx*ny*nz*channels):
+                volume_data.extend(np.zeros(nx*ny*nz*channels))
 
             overall_data_vector.extend(volume_data)
             overall_data_vector = np.array(overall_data_vector, dtype=float)
