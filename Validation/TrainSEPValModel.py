@@ -631,7 +631,7 @@ def createSepJson4ccmc(input_dt, DiskProb, prediction, issueTime=None):
     if not os.path.exists(prediction_json_dir):
         os.makedirs(prediction_json_dir)
     
-    MagPyJSONCCMC = f'MagPy-ML-HMI-SHARP-Vector.{year}{month}{day}T{hour}{minute}.{issueTime.year}{issueTime.month:02d}{issueTime.day:02d}T{issueTime.hour:02d}{issueTime.minute:02d}.json'
+    MagPyJSONCCMC = f'MagPy-ML-HMI-SHARP-Vector.{year:04d}{month:02d}{day:02d}T{hour:02d}{minute:02d}.{issueTime.year:04d}{issueTime.month:02d}{issueTime.day:02d}T{issueTime.hour:02d}{issueTime.minute:02d}.json'
     with open(os.path.join(prediction_json_dir, MagPyJSONCCMC), 'w',encoding='utf8') as JSONFile:
         json.dump(res, JSONFile, indent=2, separators=(',', ': '))
 
