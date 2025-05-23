@@ -325,7 +325,7 @@ def train_and_evaluate(X_train, y_train, X_test, y_test, model_type, data_type, 
         model_data: Dictionary with model artifacts
         
     Returns:
-        model, prediction, probability: Trained model, prediction and probability for test point
+        model, predictions, probabilities: Trained model, predictions and probabilities for all test points
     """    
     # Get the best parameters for this data type
     best_params = BEST_PARAMS[data_type]
@@ -346,38 +346,33 @@ def train_and_evaluate(X_train, y_train, X_test, y_test, model_type, data_type, 
     train_end = time.time()
     print(f'Model trained in {train_end - train_start:.2f} seconds')
     
-    # Make predictions on test point
-    prediction = model.predict(X_test)[0]
-    probability = model.predict_proba(X_test)[0][1]  # Probability of positive class
+    # Make predictions on all test points
+    predictions = model.predict(X_test)
+    probabilities = model.predict_proba(X_test)[:, 1]  # Probability of positive class for all points
     
     # Store model in model_data
     model_data['model'] = model
     
-    return model, prediction, probability
+    return model, predictions, probabilities
 
 def main(data_type, train_df, test_df, output_dir=None):
     """
-    Main function to train and evaluate a model for a single hold-out point
+    Main function to train and evaluate a model for hold-out event points
     
     Args:
         data_type: Type of data ('photospheric', 'coronal', or 'numeric')
         train_df: Training DataFrame
-        test_df: Test DataFrame (should contain only one row)
+        test_df: Test DataFrame (can contain multiple rows for one event)
         output_dir: Directory to save results (optional)
         
     Returns:
-        prediction, probability: The prediction (0/1) and probability for the test point
+        predictions, probabilities: Arrays of predictions (0/1) and probabilities for all test points
     """
     # Create output directory if provided
     if output_dir:
         os.makedirs(output_dir, exist_ok=True)
     
     start_time = time.time()
-    
-    # Check that test_df has only one row
-    if len(test_df) != 1:
-        print(f"Warning: Test dataframe has {len(test_df)} rows, expected 1. Using first row.")
-        test_df = test_df.iloc[[0]]
     
     # Check data_type is valid
     if data_type not in ['photospheric', 'coronal', 'numeric']:
@@ -434,7 +429,7 @@ def main(data_type, train_df, test_df, output_dir=None):
     )
     
     # Train and evaluate model
-    model, prediction, probability = train_and_evaluate(
+    model, predictions, probabilities = train_and_evaluate(
         X_train, y_train, X_test, y_test, 
         best_params['MODEL_TYPE'], 
         data_type, 
@@ -452,16 +447,16 @@ def main(data_type, train_df, test_df, output_dir=None):
             
             feature_importance_df.to_csv(f'{output_dir}/feature_importance.csv', index=False)
         
-        # Generate prediction JSON file
-        dt_str = dts_test[0]  # Should only be one test point
-        dt = pd.to_datetime(dt_str, format='%Y%m%d_%H%M%S_TAI')
-        createSepJson4ccmc(dt, probability, prediction, output_dir)
+        # Generate prediction JSON files for each test point
+        for i, dt_str in enumerate(dts_test):
+            dt = pd.to_datetime(dt_str, format='%Y%m%d_%H%M%S_TAI')
+            createSepJson4ccmc(dt, probabilities[i], predictions[i], f"{output_dir}/point_{i}")
     
     # Calculate total runtime
     total_time = time.time() - start_time
     print(f'Model training and evaluation completed in {total_time:.2f} seconds')
     
-    return prediction, probability
+    return predictions, probabilities
 
 def createSepJson4ccmc(input_dt, DiskProb, prediction, output_dir):
     """

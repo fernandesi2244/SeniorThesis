@@ -186,38 +186,35 @@ def process_event(event_idx, ar_num, start_time, end_time, event_type, unified_d
     
     print(f"Processing {event_type} {event_idx+1}: found {len(test_data)} test points")
     
-    # Process each individual test point
-    for test_idx, test_row in test_data.iterrows():
-        print(f"  Test point {test_idx} ({test_row['datetime']})")
-        
-        # Create training set (all data except this test point)
-        train_data = unified_data[unified_data.index != test_idx].copy()
-        
-        # Test on the single point
-        single_test_data = unified_data.iloc[[test_idx]].copy()
-        
-        # Train model and get prediction
-        prediction, probability = TrainSEPValModel.main(
-            data_subset, 
-            train_data, 
-            single_test_data,
-            f"{results_dir}/point_{test_idx}"
-        )
-        
-        # Store results
+    # Create training set (all data except ALL test points for this event)
+    train_data = unified_data[~unified_data.index.isin(test_data.index)].copy()
+    
+    print(f"  Training on {len(train_data)} points, testing on {len(test_data)} points")
+    
+    # Train one model and get predictions for all test points
+    predictions, probabilities = TrainSEPValModel.main(
+        data_subset, 
+        train_data, 
+        test_data,
+        f"{results_dir}/event_{event_type}_{event_idx}"
+    )
+    
+    # Store results for all test points in this event
+    for i, (test_idx, test_row) in enumerate(test_data.iterrows()):
         all_true_labels.append(expected_label)
-        all_predictions.append(prediction)
-        all_probabilities.append(probability)
+        all_predictions.append(predictions[i])
+        all_probabilities.append(probabilities[i])
         all_test_indices.append(test_idx)
         
         # Save individual result
-        with open(f"{results_dir}/point_{test_idx}_result.txt", "w") as f:
+        with open(f"{results_dir}/event_{event_type}_{event_idx}_point_{test_idx}_result.txt", "w") as f:
+            f.write(f"Event Index: {event_idx}\n")
             f.write(f"Test Index: {test_idx}\n")
             f.write(f"Datetime: {test_row['datetime']}\n")
             f.write(f"Event Type: {event_type}\n")
             f.write(f"Expected Label: {expected_label}\n")
-            f.write(f"Predicted Label: {prediction}\n")
-            f.write(f"Probability: {probability:.4f}\n")
+            f.write(f"Predicted Label: {predictions[i]}\n")
+            f.write(f"Probability: {probabilities[i]:.4f}\n")
 
 def calculate_and_save_metrics(y_true, y_pred, y_proba, results_dir):
     """Calculate and save performance metrics"""
