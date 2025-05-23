@@ -124,7 +124,11 @@ for data_subset in data_subsets:
     # Call main function of TrainSEPValModel.py script in same dir
     train_data_deep = train_data.copy()
     test_data_deep = test_data.copy()
-    confusion_matrix = TrainSEPValModel.main(data_subset, train_data_deep, test_data_deep, data_subset)
+    
+    # Create output directory specific to this data subset
+    output_dir = f'results/sep_model_results_{data_subset}'
+    
+    confusion_matrix = TrainSEPValModel.main(data_subset, train_data_deep, test_data_deep, output_dir)
     
     # Just print the confusion matrix for now
     print(f"Confusion Matrix for {data_subset} data subset:")

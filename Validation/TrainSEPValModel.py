@@ -544,7 +544,7 @@ def main(data_type, train_df, test_df, output_dir=None):
         prediction = model.predict(X_test[i].reshape(1, -1))[0]
         prediction_proba = model.predict_proba(X_test[i].reshape(1, -1))[0][1]
 
-        createSepJson4ccmc(dt, prediction_proba, prediction)
+        createSepJson4ccmc(dt, prediction_proba, prediction, data_type)
     
     # Calculate total runtime
     total_time = time.time() - start_time
@@ -553,9 +553,16 @@ def main(data_type, train_df, test_df, output_dir=None):
     # Return the confusion matrix
     return test_metrics['confusion_matrix']
 
-def createSepJson4ccmc(input_dt, DiskProb, prediction, issueTime=None):
+def createSepJson4ccmc(input_dt, DiskProb, prediction, data_type, issueTime=None):
     """
     Create SPE JSON file for CCMC
+    
+    Args:
+        input_dt: Input datetime
+        DiskProb: Probability value
+        prediction: Binary prediction
+        data_type: Type of data subset ('photospheric', 'coronal', 'numeric')
+        issueTime: Issue time (optional)
     """
     year = input_dt.year
     month = input_dt.month
@@ -577,8 +584,8 @@ def createSepJson4ccmc(input_dt, DiskProb, prediction, issueTime=None):
     res={
         "sep_forecast_submission": {
             "model":{
-                "short_name": "MagPy_ML_SHARP_HMI_CEA",
-                "spase_id": "spase://CCMC/SimulationModel/MagPy-ML/v1"
+                "short_name": f"MagPy_ML_SHARP_HMI_CEA_{data_type}",
+                "spase_id": f"spase://CCMC/SimulationModel/MagPy-ML/{data_type}/v1"
             },
             "mode": "forecast", # not really a forecast though since not predictions not causal (based on future data too, though most likely unrelated)
             "issue_time":f"{issueTimeStr}Z",
@@ -627,11 +634,12 @@ def createSepJson4ccmc(input_dt, DiskProb, prediction, issueTime=None):
         }
     }
     
-    prediction_json_dir = os.path.join('JSON CCMC','SEP JSON')
+    # Create data-type specific directory
+    prediction_json_dir = os.path.join('JSON CCMC', f'SEP JSON {data_type}')
     if not os.path.exists(prediction_json_dir):
         os.makedirs(prediction_json_dir)
     
-    MagPyJSONCCMC = f'MagPy-ML-HMI-SHARP-Vector.{year:04d}{month:02d}{day:02d}T{hour:02d}{minute:02d}.{issueTime.year:04d}{issueTime.month:02d}{issueTime.day:02d}T{issueTime.hour:02d}{issueTime.minute:02d}.json'
+    MagPyJSONCCMC = f'MagPy-ML-HMI-SHARP-Vector-{data_type}.{year:04d}{month:02d}{day:02d}T{hour:02d}{minute:02d}.{issueTime.year:04d}{issueTime.month:02d}{issueTime.day:02d}T{issueTime.hour:02d}{issueTime.minute:02d}.json'
     with open(os.path.join(prediction_json_dir, MagPyJSONCCMC), 'w',encoding='utf8') as JSONFile:
         json.dump(res, JSONFile, indent=2, separators=(',', ': '))
 
