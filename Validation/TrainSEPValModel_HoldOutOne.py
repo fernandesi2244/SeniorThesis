@@ -222,6 +222,11 @@ def prepare_data(train_df, test_df, granularity, data_loader_module, oversamplin
     print('X_train type:', type(X_train), 'X_train shape:', X_train.shape)
     print('y_train type:', type(y_train), 'y_train shape:', y_train.shape)
     
+    # Check if test data is empty
+    if len(X_test) == 0:
+        print("Warning: No test data found. Returning empty results.")
+        return np.array([]), np.array([]), np.array([]), np.array([]), {}, np.array([])
+    
     # Check for NaN and Inf values
     print('\nChecking for NaN and Inf values:')
     print(f'Train NaN count: {np.isnan(X_train).sum()}, Inf count: {np.isinf(X_train).sum()}')
@@ -427,6 +432,11 @@ def main(data_type, train_df, test_df, output_dir=None):
         data_loader_module, 
         best_params['OVERSAMPLING_RATIO']
     )
+    
+    # Check if we have empty test data
+    if len(X_test) == 0:
+        print("No test data available for this event. Skipping...")
+        return np.array([]), np.array([])
     
     # Train and evaluate model
     model, predictions, probabilities = train_and_evaluate(

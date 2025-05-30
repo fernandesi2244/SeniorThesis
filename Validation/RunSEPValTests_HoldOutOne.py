@@ -16,7 +16,7 @@ from sklearn.metrics import confusion_matrix
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-import TrainSEPValModel_HoldOutOne as TrainSEPValModel
+import TrainSEPValModel_HoldOut1 as TrainSEPValModel
 
 # Define data subsets to test
 data_subsets = ['photospheric', 'coronal', 'numeric']
@@ -198,6 +198,11 @@ def process_event(event_idx, ar_num, start_time, end_time, event_type, unified_d
         test_data,
         f"{results_dir}/event_{event_type}_{event_idx}"
     )
+    
+    # Check if we got empty results (no test data)
+    if len(predictions) == 0:
+        print(f"  No predictions returned for {event_type} {event_idx+1}")
+        return
     
     # Store results for all test points in this event
     for i, (test_idx, test_row) in enumerate(test_data.iterrows()):
