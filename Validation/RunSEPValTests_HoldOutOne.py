@@ -16,7 +16,7 @@ from sklearn.metrics import confusion_matrix
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-import TrainSEPValModel_HoldOut1 as TrainSEPValModel
+import TrainSEPValModel_HoldOutOne as TrainSEPValModel
 
 # Define data subsets to test
 data_subsets = ['photospheric', 'coronal', 'numeric']
