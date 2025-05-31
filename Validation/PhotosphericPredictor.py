@@ -2,7 +2,8 @@
 Photospheric SEP Prediction Script
 
 This script loads the trained photospheric model and makes predictions on input feature vectors,
-outputting results in CCMC JSON format.
+outputting results in CCMC JSON format. Enhanced to compare predictions from both final
+models and results models.
 """
 
 import numpy as np
@@ -14,57 +15,113 @@ from datetime import timedelta
 import os
 import sys
 import pathlib
+import glob
 
 # Add the SEPPrediction directory to the path
 rootDir = pathlib.Path(__file__).resolve().parent.parent.absolute()
 sys.path.insert(1, os.path.join(rootDir, 'SEPPrediction'))
 
 class PhotosphericPredictor:
-    def __init__(self, model_path='final_models/photospheric_final_model.joblib'):
+    def __init__(self, final_model_path='final_models/photospheric_final_model.joblib', 
+                 results_model_dir='../SEPPrediction/results/photospheric_data/'):
         """
         Initialize the photospheric predictor
         
         Args:
-            model_path: Path to the trained model file
+            final_model_path: Path to the final trained model file
+            results_model_dir: Directory containing the results model file
         """
-        self.model_path = model_path
-        self.model_data = None
-        self.model = None
-        self.scaler = None
-        self.pca = None
-        self.feature_indices = None
-        self.feature_names = None
+        self.final_model_path = final_model_path
+        self.results_model_dir = results_model_dir
         
-        self.load_model()
+        # Final model attributes
+        self.final_model_data = None
+        self.final_model = None
+        self.final_scaler = None
+        self.final_pca = None
+        self.final_feature_indices = None
+        self.final_feature_names = None
+        
+        # Results model attributes
+        self.results_model_data = None
+        self.results_model = None
+        self.results_scaler = None
+        self.results_pca = None
+        self.results_feature_indices = None
+        self.results_feature_names = None
+        self.results_model_path = None
+        
+        self.load_models()
     
-    def load_model(self):
-        """Load the trained model and preprocessing artifacts"""
-        if not os.path.exists(self.model_path):
-            raise FileNotFoundError(f"Model file not found: {self.model_path}")
+    def find_results_model(self):
+        """Find the joblib file in the results directory"""
+        if not os.path.exists(self.results_model_dir):
+            raise FileNotFoundError(f"Results model directory not found: {self.results_model_dir}")
         
-        print(f"Loading photospheric model from {self.model_path}")
-        self.model_data = joblib.load(self.model_path)
+        joblib_files = glob.glob(os.path.join(self.results_model_dir, "*.joblib"))
+        if not joblib_files:
+            raise FileNotFoundError(f"No joblib files found in: {self.results_model_dir}")
         
-        self.model = self.model_data['model']
-        self.scaler = self.model_data['scaler']
-        self.pca = self.model_data.get('pca', None)
-        self.feature_indices = self.model_data['feature_indices']
-        self.feature_names = self.model_data['feature_names']
+        if len(joblib_files) > 1:
+            print(f"Warning: Multiple joblib files found, using first one: {joblib_files[0]}")
         
-        print(f"Model loaded successfully")
-        print(f"Number of features: {len(self.feature_names)}")
-        print(f"PCA applied: {'Yes' if self.pca is not None else 'No'}")
+        return joblib_files[0]
     
-    def preprocess_features(self, feature_vector):
+    def load_models(self):
+        """Load both the final and results models"""
+        # Load final model
+        if not os.path.exists(self.final_model_path):
+            raise FileNotFoundError(f"Final model file not found: {self.final_model_path}")
+        
+        print(f"Loading final photospheric model from {self.final_model_path}")
+        self.final_model_data = joblib.load(self.final_model_path)
+        
+        self.final_model = self.final_model_data['model']
+        self.final_scaler = self.final_model_data['scaler']
+        self.final_pca = self.final_model_data.get('pca', None)
+        self.final_feature_indices = self.final_model_data['feature_indices']
+        self.final_feature_names = self.final_model_data['feature_names']
+        
+        print(f"Final model loaded successfully")
+        print(f"Final model features: {len(self.final_feature_names)}")
+        print(f"Final model PCA applied: {'Yes' if self.final_pca is not None else 'No'}")
+        
+        # Load results model
+        self.results_model_path = self.find_results_model()
+        print(f"\nLoading results photospheric model from {self.results_model_path}")
+        self.results_model_data = joblib.load(self.results_model_path)
+        
+        self.results_model = self.results_model_data['model']
+        self.results_scaler = self.results_model_data['scaler']
+        self.results_pca = self.results_model_data.get('pca', None)
+        self.results_feature_indices = self.results_model_data['feature_indices']
+        self.results_feature_names = self.results_model_data['feature_names']
+        
+        print(f"Results model loaded successfully")
+        print(f"Results model features: {len(self.results_feature_names)}")
+        print(f"Results model PCA applied: {'Yes' if self.results_pca is not None else 'No'}")
+    
+    def preprocess_features(self, feature_vector, model_type='final'):
         """
         Preprocess the input feature vector
         
         Args:
             feature_vector: Input feature vector (numpy array or list)
+            model_type: 'final' or 'results' to specify which model's preprocessing to use
             
         Returns:
             Preprocessed feature vector ready for prediction
         """
+        # Select the appropriate preprocessing components
+        if model_type == 'final':
+            scaler = self.final_scaler
+            pca = self.final_pca
+            feature_indices = self.final_feature_indices
+        else:
+            scaler = self.results_scaler
+            pca = self.results_pca
+            feature_indices = self.results_feature_indices
+        
         # Convert to numpy array if needed
         if not isinstance(feature_vector, np.ndarray):
             feature_vector = np.array(feature_vector)
@@ -77,14 +134,14 @@ class PhotosphericPredictor:
         feature_vector = np.nan_to_num(feature_vector, nan=0.0, posinf=0.0, neginf=0.0)
         
         # Apply scaling
-        feature_vector_scaled = self.scaler.transform(feature_vector)
+        feature_vector_scaled = scaler.transform(feature_vector)
         
         # Select features used during training
-        feature_vector_selected = feature_vector_scaled[:, self.feature_indices]
+        feature_vector_selected = feature_vector_scaled[:, feature_indices]
         
         # Apply PCA if it was used during training
-        if self.pca is not None:
-            feature_vector_final = self.pca.transform(feature_vector_selected)
+        if pca is not None:
+            feature_vector_final = pca.transform(feature_vector_selected)
         else:
             feature_vector_final = feature_vector_selected
         
@@ -92,33 +149,45 @@ class PhotosphericPredictor:
     
     def predict(self, feature_vector):
         """
-        Make prediction on input feature vector
+        Make prediction on input feature vector using both models
         
         Args:
             feature_vector: Input feature vector
             
         Returns:
-            Dictionary containing prediction and probability
+            Dictionary containing predictions and probabilities from both models
         """
-        # Preprocess the feature vector
-        X_processed = self.preprocess_features(feature_vector)
+        # Preprocess the feature vector for both models
+        X_final = self.preprocess_features(feature_vector, 'final')
+        X_results = self.preprocess_features(feature_vector, 'results')
         
-        # Make prediction
-        prediction = self.model.predict(X_processed)[0]
-        prediction_proba = self.model.predict_proba(X_processed)[0][1]
+        # Make predictions with final model
+        final_prediction = self.final_model.predict(X_final)[0]
+        final_prediction_proba = self.final_model.predict_proba(X_final)[0][1]
+        
+        # Make predictions with results model
+        results_prediction = self.results_model.predict(X_results)[0]
+        results_prediction_proba = self.results_model.predict_proba(X_results)[0][1]
         
         return {
-            'prediction': int(prediction),
-            'probability': float(prediction_proba)
+            'final_model': {
+                'prediction': int(final_prediction),
+                'probability': float(final_prediction_proba)
+            },
+            'results_model': {
+                'prediction': int(results_prediction),
+                'probability': float(results_prediction_proba)
+            }
         }
     
-    def create_ccmc_json(self, input_dt, prediction_result, output_path=None, issueTime=None):
+    def create_ccmc_json(self, input_dt, prediction_result, model_type='final', output_path=None, issueTime=None):
         """
         Create CCMC JSON format output
         
         Args:
             input_dt: Input datetime (datetime object or string)
-            prediction_result: Dictionary from predict() method
+            prediction_result: Dictionary from predict() method for specific model
+            model_type: 'final' or 'results' to specify which model result to use
             output_path: Path to save JSON file (optional)
             issueTime: Issue time (optional, defaults to current UTC time)
             
@@ -155,11 +224,12 @@ class PhotosphericPredictor:
         issueTimeStr = datetime.datetime.strftime(issueTime, '%Y-%m-%dT%H:%M:%S')
         
         # Create CCMC JSON structure
+        model_suffix = f"_{model_type}" if model_type == 'results' else ""
         ccmc_json = {
             "sep_forecast_submission": {
                 "model": {
-                    "short_name": "MagPy_ML_SHARP_HMI_CEA_photospheric",
-                    "spase_id": "spase://CCMC/SimulationModel/MagPy-ML/photospheric/v1"
+                    "short_name": f"MagPy_ML_SHARP_HMI_CEA_photospheric{model_suffix}",
+                    "spase_id": f"spase://CCMC/SimulationModel/MagPy-ML/photospheric{model_suffix}/v1"
                 },
                 "mode": "forecast",
                 "issue_time": f"{issueTimeStr}Z",
@@ -222,7 +292,7 @@ class PhotosphericPredictor:
     
     def predict_and_export(self, feature_vector, input_dt, output_dir='predictions/photospheric', issueTime=None):
         """
-        Make prediction and export CCMC JSON in one step
+        Make prediction and export CCMC JSON for both models
         
         Args:
             feature_vector: Input feature vector
@@ -231,10 +301,10 @@ class PhotosphericPredictor:
             issueTime: Issue time (optional)
             
         Returns:
-            Dictionary containing prediction result and file path
+            Dictionary containing prediction results and file paths for both models
         """
-        # Make prediction
-        prediction_result = self.predict(feature_vector)
+        # Make predictions with both models
+        prediction_results = self.predict(feature_vector)
         
         # Parse datetime for filename
         if isinstance(input_dt, str):
@@ -249,18 +319,36 @@ class PhotosphericPredictor:
         if issueTime is None:
             issueTime = datetime.datetime.now(datetime.timezone.utc)
         
-        # Create filename
-        filename = f'MagPy-ML-HMI-SHARP-Vector-photospheric.{dt_parsed.year:04d}{dt_parsed.month:02d}{dt_parsed.day:02d}T{dt_parsed.hour:02d}{dt_parsed.minute:02d}.{issueTime.year:04d}{issueTime.month:02d}{issueTime.day:02d}T{issueTime.hour:02d}{issueTime.minute:02d}.json'
-        output_path = os.path.join(output_dir, filename)
+        # Create filenames for both models
+        base_filename = f'MagPy-ML-HMI-SHARP-Vector-photospheric.{dt_parsed.year:04d}{dt_parsed.month:02d}{dt_parsed.day:02d}T{dt_parsed.hour:02d}{dt_parsed.minute:02d}.{issueTime.year:04d}{issueTime.month:02d}{issueTime.day:02d}T{issueTime.hour:02d}{issueTime.minute:02d}'
         
-        # Create CCMC JSON
-        ccmc_json = self.create_ccmc_json(input_dt, prediction_result, output_path, issueTime)
+        final_filename = f'{base_filename}_final.json'
+        results_filename = f'{base_filename}_results.json'
+        
+        final_output_path = os.path.join(output_dir, final_filename)
+        results_output_path = os.path.join(output_dir, results_filename)
+        
+        # Create CCMC JSONs for both models
+        final_ccmc_json = self.create_ccmc_json(input_dt, prediction_results['final_model'], 'final', final_output_path, issueTime)
+        results_ccmc_json = self.create_ccmc_json(input_dt, prediction_results['results_model'], 'results', results_output_path, issueTime)
         
         return {
-            'prediction': prediction_result['prediction'],
-            'probability': prediction_result['probability'],
-            'json_file': output_path,
-            'ccmc_json': ccmc_json
+            'final_model': {
+                'prediction': prediction_results['final_model']['prediction'],
+                'probability': prediction_results['final_model']['probability'],
+                'json_file': final_output_path,
+                'ccmc_json': final_ccmc_json
+            },
+            'results_model': {
+                'prediction': prediction_results['results_model']['prediction'],
+                'probability': prediction_results['results_model']['probability'],
+                'json_file': results_output_path,
+                'ccmc_json': results_ccmc_json
+            },
+            'comparison': {
+                'prediction_agreement': prediction_results['final_model']['prediction'] == prediction_results['results_model']['prediction'],
+                'probability_difference': abs(prediction_results['final_model']['probability'] - prediction_results['results_model']['probability'])
+            }
         }
 
 def main():
@@ -327,16 +415,30 @@ def main():
             print(f"WARNING: Feature vector length ({len(your_feature_vector)}) doesn't match expected length (521)")
             print("Please check your feature vector dimensions")
         
-        # Make prediction and export
+        # Make prediction and export for both models
         result = predictor.predict_and_export(
             feature_vector=your_feature_vector,
             input_dt=your_datetime,
             output_dir='predictions/photospheric'
         )
         
-        print(f"Prediction: {result['prediction']}")
-        print(f"Probability: {result['probability']:.4f}")
-        print(f"JSON file saved: {result['json_file']}")
+        print("\n" + "="*60)
+        print("PREDICTION RESULTS COMPARISON")
+        print("="*60)
+        
+        print(f"\nFinal Model:")
+        print(f"  Prediction: {result['final_model']['prediction']}")
+        print(f"  Probability: {result['final_model']['probability']:.4f}")
+        print(f"  JSON file: {result['final_model']['json_file']}")
+        
+        print(f"\nResults Model:")
+        print(f"  Prediction: {result['results_model']['prediction']}")
+        print(f"  Probability: {result['results_model']['probability']:.4f}")
+        print(f"  JSON file: {result['results_model']['json_file']}")
+        
+        print(f"\nComparison:")
+        print(f"  Predictions agree: {result['comparison']['prediction_agreement']}")
+        print(f"  Probability difference: {result['comparison']['probability_difference']:.4f}")
         
     except Exception as e:
         print(f"Error: {str(e)}")
