@@ -204,11 +204,16 @@ def process_event(event_idx, ar_num, start_time, end_time, event_type, unified_d
         print(f"  No predictions returned for {event_type} {event_idx+1}")
         return
     
+    # Verify that we have the right number of predictions
+    if len(predictions) != len(test_data):
+        print(f"  Warning: Expected {len(test_data)} predictions, got {len(predictions)}. Skipping this event.")
+        return
+    
     # Store results for all test points in this event
-    for i, (test_idx, test_row) in enumerate(test_data.iterrows()):
+    for idx, (test_idx, test_row) in enumerate(test_data.iterrows()):
         all_true_labels.append(expected_label)
-        all_predictions.append(predictions[i])
-        all_probabilities.append(probabilities[i])
+        all_predictions.append(predictions[idx])
+        all_probabilities.append(probabilities[idx])
         all_test_indices.append(test_idx)
         
         # Save individual result
@@ -218,8 +223,8 @@ def process_event(event_idx, ar_num, start_time, end_time, event_type, unified_d
             f.write(f"Datetime: {test_row['datetime']}\n")
             f.write(f"Event Type: {event_type}\n")
             f.write(f"Expected Label: {expected_label}\n")
-            f.write(f"Predicted Label: {predictions[i]}\n")
-            f.write(f"Probability: {probabilities[i]:.4f}\n")
+            f.write(f"Predicted Label: {predictions[idx]}\n")
+            f.write(f"Probability: {probabilities[idx]:.4f}\n")
 
 def calculate_and_save_metrics(y_true, y_pred, y_proba, results_dir):
     """Calculate and save performance metrics"""
